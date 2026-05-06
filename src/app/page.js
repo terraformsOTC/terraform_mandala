@@ -173,34 +173,32 @@ function HomeInner() {
           </p>
         )}
 
-        <div className="max-w-2xl">
-          <h1 className="text-2xl mb-4">heightmap mandala generator</h1>
-          <p className="text-sm opacity-75 mb-3">
-            Generates mandala-style heightmaps for terraform parcels. Input variables can be
-            flexed to alter the mandala animation. Those familiar with etherscan can export the
-            heightmap and commit it as a drawing onchain.
-          </p>
-          <div className="flex flex-col gap-2 mb-2 mt-6">
-            <label className="text-xs opacity-60 uppercase tracking-wider">input parcel id</label>
-            <form
-              onSubmit={(e) => { e.preventDefault(); submitTokenId(); }}
-              className="flex gap-2 items-center"
-            >
-              <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={11104}
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-                placeholder="1 – 11104"
-                className="flex-1 max-w-xs"
-              />
-              <button type="submit" className="btn-primary btn-sm">
-                load parcel
-              </button>
-            </form>
-          </div>
+        <h1 className="text-2xl mb-4">heightmap mandala generator</h1>
+        <p className="text-sm opacity-75 mb-3">
+          Generates mandala-style heightmaps for terraform parcels. Input variables can be flexed
+          to alter the mandala animation. Those familiar with etherscan can export the heightmap
+          and commit it as a drawing onchain.
+        </p>
+        <div className="max-w-2xl flex flex-col gap-2 mb-2 mt-6">
+          <label className="text-xs opacity-60 uppercase tracking-wider">input parcel id</label>
+          <form
+            onSubmit={(e) => { e.preventDefault(); submitTokenId(); }}
+            className="flex gap-2 items-center"
+          >
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={11104}
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="1 – 11104"
+              className="flex-1 max-w-xs"
+            />
+            <button type="submit" className="btn-primary btn-sm">
+              load parcel
+            </button>
+          </form>
         </div>
 
         {walletAddress && (
