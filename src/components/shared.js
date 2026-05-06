@@ -5,19 +5,14 @@ export function shortAddress(addr) {
 
 export function Footer() {
   return (
-    <footer className="px-6 mt-16 mb-6 text-xs opacity-40">
-      Built by{' '}
+    <footer className="px-6 mt-16 mb-6 text-xs opacity-40 max-w-3xl leading-relaxed">
+      This project builds on top of the 2025 0xGoldenFlower project and mandala algo originally
+      conceived by @d3l33t, a Mathcastles community member. Carried forward by{' '}
       <a href="https://x.com/TerraformsOTC" target="_blank" rel="noopener noreferrer">
         TerraformsOTC
       </a>{' '}
-      and Claude · Sister tools:{' '}
-      <a href="https://terraformestimator.xyz" target="_blank" rel="noopener noreferrer">
-        estimator
-      </a>
-      {' · '}
-      <a href="https://terraformlore.xyz" target="_blank" rel="noopener noreferrer">
-        lore
-      </a>
+      and Claude. This is experimental software, always independently verify transactions
+      constructed using this tool before submitting.
     </footer>
   );
 }
