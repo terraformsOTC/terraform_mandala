@@ -41,11 +41,25 @@ export default function MandalaControls({ params, onChange }) {
         onChange={(peakHeight) => update({ peakHeight })}
       />
       <Slider
+        label="min height"
+        value={params.minHeight}
+        min={0}
+        max={Math.max(0, params.peakHeight - 1)}
+        onChange={(minHeight) => update({ minHeight })}
+      />
+      <Slider
         label="start value"
         value={params.startValue}
-        min={0}
-        max={9}
+        min={params.minHeight}
+        max={params.peakHeight}
         onChange={(startValue) => update({ startValue })}
+      />
+      <Slider
+        label="bias"
+        value={params.bias}
+        min={-2}
+        max={2}
+        onChange={(bias) => update({ bias })}
       />
 
       <Field label="rotational order">

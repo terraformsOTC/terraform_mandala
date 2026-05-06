@@ -28,6 +28,14 @@ export default function Header({ walletAddress, onConnect, onDisconnect }) {
           >
             [lore ↗]
           </a>
+          <a
+            href="https://terraformexplorer.xyz/dreams"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm opacity-60 hover:opacity-100 transition-opacity no-underline hidden md:inline whitespace-nowrap"
+          >
+            [dream timeline ↗]
+          </a>
           {walletAddress ? (
             <button className="btn-primary btn-sm" onClick={onDisconnect} title="Click to disconnect">
               {short}

@@ -25,17 +25,21 @@ export const DEFAULTS = {
   peakHeight: 9,
   startValue: 5,
   rotationalOrder: 4,
+  minHeight: 0,
+  bias: 0,
 };
 
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
   const variance = clampInt(opts.variance ?? DEFAULTS.variance, 1, 4);
   const peakHeight = clampInt(opts.peakHeight ?? DEFAULTS.peakHeight, 1, 9);
-  const startValue = clampInt(opts.startValue ?? DEFAULTS.startValue, 0, peakHeight);
+  const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
+  const startValue = clampInt(opts.startValue ?? DEFAULTS.startValue, minHeight, peakHeight);
+  const bias = clampInt(opts.bias ?? DEFAULTS.bias, -2, 2);
   const rotationalOrder = opts.rotationalOrder === 8 ? 8 : 4;
 
   const rng = makeRng(seed);
-  const quadrant = walkQuadrant(rng, variance, peakHeight, startValue);
+  const quadrant = walkQuadrant(rng, variance, peakHeight, startValue, minHeight, bias);
   diagonalMirror(quadrant);
   if (rotationalOrder === 8) symmetrizeMainDiagonal(quadrant);
 
@@ -55,15 +59,15 @@ function clampInt(n, lo, hi) {
   return Math.max(lo, Math.min(hi, i));
 }
 
-function walkQuadrant(rng, variance, peakHeight, startValue) {
+function walkQuadrant(rng, variance, peakHeight, startValue, minHeight, bias) {
   const q = Array.from({ length: QUADRANT }, () => Array(QUADRANT).fill(null));
   let last = startValue;
   for (let i = 0; i < QUADRANT; i++) {
     for (let j = 0; j < QUADRANT; j++) {
       if (QUADRANT - i - 1 <= j) {
-        const step = Math.floor(rng() * (variance * 2 + 1)) - variance;
+        const step = Math.floor(rng() * (variance * 2 + 1)) - variance + bias;
         let v = last + step;
-        v = Math.max(0, Math.min(peakHeight, v));
+        v = Math.max(minHeight, Math.min(peakHeight, v));
         last = v;
         q[i][j] = v;
       }

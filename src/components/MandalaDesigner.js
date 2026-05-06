@@ -17,7 +17,7 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
   }, [params]);
 
   return (
-    <div className="grid gap-8 mt-2" style={{ gridTemplateColumns: 'minmax(280px, 360px) 1fr' }}>
+    <div className="grid gap-8 mt-2" style={{ gridTemplateColumns: 'minmax(320px, 640px) 1fr' }}>
       <div className="flex flex-col gap-4">
         <h2 className="text-lg opacity-90">[animation controls]</h2>
         <MandalaControls params={params} onChange={onParamsChange} />
@@ -55,5 +55,7 @@ export function defaultParams() {
     peakHeight: DEFAULTS.peakHeight,
     startValue: DEFAULTS.startValue,
     rotationalOrder: DEFAULTS.rotationalOrder,
+    minHeight: DEFAULTS.minHeight,
+    bias: DEFAULTS.bias,
   };
 }
