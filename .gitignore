@@ -1,0 +1,8 @@
+node_modules
+.next
+.env*.local
+.DS_Store
+*.log
+
+# Local-only project context files (notes, reference scripts)
+initial context import files/
