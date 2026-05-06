@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { generateMandala, DEFAULTS } from '@/lib/mandala';
-import { validate } from '@/lib/heightmap';
 import MandalaControls from './MandalaControls';
 import HeightmapInspector from './HeightmapInspector';
 import ParcelPreview from './ParcelPreview';
@@ -17,17 +16,12 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
     }
   }, [params]);
 
-  const validation = useMemo(
-    () => (generated.heightmap ? validate(generated.heightmap) : null),
-    [generated.heightmap],
-  );
-
   return (
     <div className="grid gap-8 mt-2" style={{ gridTemplateColumns: 'minmax(280px, 360px) 1fr' }}>
       <div className="flex flex-col gap-4">
         <h2 className="text-lg opacity-90">[animation controls]</h2>
         <MandalaControls params={params} onChange={onParamsChange} />
-        <HeightmapInspector heightmap={generated.heightmap} validation={validation || {}} />
+        <HeightmapInspector heightmap={generated.heightmap} />
         {generated.error && (
           <p className="text-xs" style={{ color: '#f87171' }}>
             generator error: {generated.error}

@@ -8,7 +8,6 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
 import { DEFAULTS } from '@/lib/mandala';
-import { randomSeed } from '@/lib/seedrandom';
 
 const SEARCH_PARAM_KEYS = ['token', 'seed', 'variance', 'peak', 'start', 'order'];
 

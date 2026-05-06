@@ -24,10 +24,10 @@ Terraforms contract: `0x4E1f41613c9084FdB9E34E11fAE9412427480e56`.
 
 ### Libraries (`src/lib/`)
 - `mandala.js` — port of d3l33t's mandala-gen2.js. `generateMandala({ seed, variance, peakHeight, startValue, rotationalOrder })` → `{ heightmap, grid }`. Throws if output isn't fully symmetric. Asserts via `heightmap.js`.
-- `heightmap.js` — port of `initial context import files/heightmap_validate.py`. `validate`, `encode` (→ `uint256[16]` hex strings, always 0x-prefixed), `heightmapToGrid`, `asciiViz`. The class mapping at the top maps height digit (0–9) → CSS class letter (`a`–`i`). Heights 8 and 9 both collapse to class `i` — verify against committed heightmaps if this proves wrong.
+- `heightmap.js` — port of `initial context import files/heightmap_validate.py`. `validate`, `encode` (→ `uint256[16]` hex strings, always 0x-prefixed), `asciiViz`.
 - `seedrandom.js` — vendored mulberry32 + FNV-1a string hash. No npm dep.
 - `contract.js` — ethers `JsonRpcProvider` singleton, ABI fragments, `statusLabel(n)`. Status enum observed on-chain: `0=Daydreaming, 1=Dreaming, 2=Terraformed, 3=Origin` (status 3 seen on token 83 — special parcel).
-- `tokenHTML.js` — server-side LRU cache (200 entries, 60s TTL). `extractAnimData(html)` regexes out `colors`, `chars`, `bg`, `seed`, `resource`, `direction`. `replaceCells(html, gridClasses, chars)` swaps the `<div class='r'>` cell grid for our mandala cells.
+- `tokenHTML.js` — server-side LRU cache (200 entries, 60s TTL). `fetchTokenHTML(id)` returns the raw on-chain HTML. `extractAnimData(html)` regexes out `colors`, `chars`, `bg`, `seed`, `resource`, `direction`. The cell substitution itself happens client-side in `ParcelPreview.buildPreviewHtml`.
 
 ### API routes (`src/app/api/`)
 - `wallet/[address]/route.js` — `balanceOf` + `tokenOfOwnerByIndex` enumeration, capped at 200 parcels. Returns `{ tokenId, status, statusLabel }` per parcel.

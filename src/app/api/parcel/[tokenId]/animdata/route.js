@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchTokenHTML, extractAnimData } from '@/lib/tokenHTML';
-import { getContract, statusLabel } from '@/lib/contract';
+import { getContract } from '@/lib/contract';
 
 export async function GET(_req, { params }) {
   const tokenId = Number(params.tokenId);
@@ -17,12 +17,7 @@ export async function GET(_req, { params }) {
     return NextResponse.json({
       tokenId,
       status,
-      statusLabel: status != null ? statusLabel(status) : null,
-      seed: meta.seed,
-      resource: meta.resource,
-      direction: meta.direction,
       bg: meta.bg,
-      colors: meta.colors,
       chars: meta.chars,
       html,
     });

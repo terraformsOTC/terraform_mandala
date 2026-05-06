@@ -8,13 +8,7 @@
 export const SIDE = 32;
 export const TOTAL = 1024;
 
-// Class letters for TerraformAnimation. Index = height (0..9). Mirrors
-// Estimator's TerraformAnimation.js CLASS_IDS reversed: height 0 = 'a',
-// height 8 = 'i'. Height 9 collapses to 'i' too — verify empirically against
-// committed heightmaps containing 9s (e.g. user's Heightmap B on token 871).
-const HEIGHT_TO_CLASS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'i'];
-
-export function clean(str) {
+function clean(str) {
   return String(str).replace(/\s+/g, '');
 }
 
@@ -71,14 +65,6 @@ export function encode(hm) {
   if (!/^[0-9]+$/.test(s)) throw new Error('encode: heightmap must be digits 0-9 only');
   const out = [];
   for (let i = 0; i < 16; i++) out.push('0x' + s.slice(i * 64, (i + 1) * 64));
-  return out;
-}
-
-export function heightmapToGrid(hm) {
-  const s = clean(hm);
-  if (s.length !== TOTAL) throw new Error(`heightmapToGrid: expected ${TOTAL} chars`);
-  const out = new Array(TOTAL);
-  for (let i = 0; i < TOTAL; i++) out[i] = HEIGHT_TO_CLASS[Number(s[i])] || 'a';
   return out;
 }
 

@@ -61,21 +61,3 @@ export function extractAnimData(html) {
 function num(m) {
   return m ? Number(m[1]) : null;
 }
-
-// Replace the contract's rendered cell grid with a custom one.
-// `gridClasses` is a 1024-long array of class letters (output of
-// heightmapToGrid). `chars` is the extracted per-class char map. Cells whose
-// class has no char fall back to '&#160;' (non-breaking space).
-export function replaceCells(html, gridClasses, chars) {
-  if (gridClasses.length !== 1024) {
-    throw new Error(`replaceCells: expected 1024 classes, got ${gridClasses.length}`);
-  }
-  const cellsHtml = gridClasses
-    .map((cls) => `<p class='${cls}'>${chars[cls] ?? '&#160;'}</p>`)
-    .join('');
-  // The <div class='r'> wraps all 1024 <p> cells. Replace its inner content.
-  return html.replace(
-    /(<div class='r'[^>]*>)[\s\S]*?(<\/div>\s*<\/div>\s*<\/foreignObject>)/,
-    `$1${cellsHtml}$2`,
-  );
-}

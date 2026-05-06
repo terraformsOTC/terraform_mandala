@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { encode, asciiViz } from '@/lib/heightmap';
 
-export default function HeightmapInspector({ heightmap, validation }) {
+import { TERRAFORMS_ADDRESS } from '@/lib/contract';
+
+export default function HeightmapInspector({ heightmap }) {
   const [copiedAll, setCopiedAll] = useState(false);
 
   if (!heightmap) return null;
@@ -54,7 +56,7 @@ export default function HeightmapInspector({ heightmap, validation }) {
                   {copiedAll ? '[copied!]' : '[copy array]'}
                 </button>
                 <a
-                  href="https://etherscan.io/token/0x4e1f41613c9084fdb9e34e11fae9412427480e56#writeContract"
+                  href={`https://etherscan.io/token/${TERRAFORMS_ADDRESS}#writeContract`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-primary btn-sm text-xs no-underline inline-flex items-center"
