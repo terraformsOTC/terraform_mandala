@@ -25,7 +25,7 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
   return (
     <div className="grid gap-8 mt-2" style={{ gridTemplateColumns: 'minmax(280px, 360px) 1fr' }}>
       <div className="flex flex-col gap-4">
-        <h2 className="text-lg opacity-90">[mandala controls]</h2>
+        <h2 className="text-lg opacity-90">[animation controls]</h2>
         <MandalaControls params={params} onChange={onParamsChange} />
         <HeightmapInspector heightmap={generated.heightmap} validation={validation || {}} />
         {generated.error && (
@@ -35,15 +35,9 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
         )}
       </div>
       <div className="flex flex-col gap-3 items-start">
-        <h2 className="text-lg opacity-90">
-          [preview — token {animData?.tokenId}{' '}
-          {animData?.statusLabel ? (
-            <span className="text-xs opacity-60">({animData.statusLabel})</span>
-          ) : null}
-          ]
-        </h2>
+        <h2 className="text-lg opacity-90">[preview — #{animData?.tokenId}]</h2>
         <p className="text-xs opacity-50 max-w-md">
-          rendered with this parcel&rsquo;s on-chain font and palette. preview only — no on-chain
+          Rendered with this parcel&rsquo;s on-chain font and palette. Preview only — no on-chain
           action is taken.
         </p>
         <ParcelPreview animData={animData} heightmap={generated.heightmap} />

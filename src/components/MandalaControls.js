@@ -67,7 +67,7 @@ export default function MandalaControls({ params, onChange }) {
             style={{ opacity: params.rotationalOrder === 8 ? 1 : 0.5 }}
             onClick={() => update({ rotationalOrder: 8 })}
           >
-            8-fold (octagonal)
+            8-fold
           </button>
         </div>
       </Field>

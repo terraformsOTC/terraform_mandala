@@ -48,7 +48,7 @@ export default function HeightmapInspector({ heightmap, validation }) {
       </div>
 
       <details className="text-xs opacity-80">
-        <summary className="cursor-pointer">[ascii viz]</summary>
+        <summary className="cursor-pointer">[ascii visualisation]</summary>
         <pre className="mt-2 leading-none text-[10px] opacity-90" style={{ fontFamily: 'monospace' }}>
 {asciiViz(heightmap)}
         </pre>

@@ -5,7 +5,7 @@ export function shortAddress(addr) {
 
 export function Footer() {
   return (
-    <footer className="px-6 mt-16 mb-6 text-xs opacity-40 max-w-3xl leading-relaxed">
+    <footer className="px-6 mt-16 mb-6 text-xs opacity-40 leading-relaxed">
       This project builds on top of the 2025 0xGoldenFlower project and mandala algo originally
       conceived by @d3l33t, a Mathcastles community member. Carried forward by{' '}
       <a href="https://x.com/TerraformsOTC" target="_blank" rel="noopener noreferrer">
