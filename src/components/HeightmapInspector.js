@@ -5,7 +5,6 @@ import { encode, asciiViz } from '@/lib/heightmap';
 
 export default function HeightmapInspector({ heightmap, validation }) {
   const [copiedAll, setCopiedAll] = useState(false);
-  const [copiedRaw, setCopiedRaw] = useState(false);
 
   if (!heightmap) return null;
 
@@ -29,11 +28,6 @@ export default function HeightmapInspector({ heightmap, validation }) {
     await navigator.clipboard.writeText(arrayString);
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 1200);
-  };
-  const copyRaw = async () => {
-    await navigator.clipboard.writeText(heightmap);
-    setCopiedRaw(true);
-    setTimeout(() => setCopiedRaw(false), 1200);
   };
 
   return (
@@ -74,9 +68,14 @@ export default function HeightmapInspector({ heightmap, validation }) {
                 <button type="button" className="btn-primary btn-sm text-xs" onClick={copyArray}>
                   {copiedAll ? '[copied!]' : '[copy array]'}
                 </button>
-                <button type="button" className="btn-primary btn-sm text-xs" onClick={copyRaw}>
-                  {copiedRaw ? '[copied!]' : '[copy 1024-char string]'}
-                </button>
+                <a
+                  href="https://etherscan.io/token/0x4e1f41613c9084fdb9e34e11fae9412427480e56#writeContract"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary btn-sm text-xs no-underline inline-flex items-center"
+                >
+                  [etherscan ↗]
+                </a>
               </div>
             </>
           ) : (
