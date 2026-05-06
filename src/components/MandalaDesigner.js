@@ -30,16 +30,16 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
       </div>
       <div className="flex flex-col gap-3 items-start">
         <h2 className="text-lg opacity-90">[preview — #{animData?.tokenId}]</h2>
-        <p className="text-xs opacity-50 max-w-md">
+        <p className="text-xs opacity-50">
           Rendered using the parcel&rsquo;s onchain zone, biome, and chroma traits. Terrain mode
-          parcels have been simulated here in daydream mode to faithfully represent what they
-          would look like if terraformed.
+          parcels have been simulated in daydream mode to faithfully represent what they would
+          look like if terraformed.
         </p>
         {animData?.status === 0 && animData?.hasV2Renderer === false && (
-          <p className="text-xs opacity-50 max-w-md" style={{ color: '#f6c177' }}>
-            Note: this parcel pre-dates the v2 contract renderer (no Version=2.0 in its metadata),
-            so the preview falls back to the legacy daydream animation rather than the v2 radial
-            ring pattern. The onchain output for this parcel will look the same in daydream mode.
+          <p className="text-xs opacity-50" style={{ color: '#f6c177' }}>
+            Note: this parcel uses the v0 contract renderer, so the preview reverts to the legacy
+            daydream animation rather than the distinctive v2 radial &ldquo;antenna&rdquo;
+            pattern. The owner of this parcel can update it to v2 at any time.
           </p>
         )}
         <ParcelPreview animData={animData} heightmap={generated.heightmap} />
