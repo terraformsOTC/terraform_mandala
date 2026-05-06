@@ -49,11 +49,23 @@ function buildPreviewHtml(animData, heightmap) {
     `$1${cellsHtml}$2`,
   );
   // Terrain mode (status 0) uses a different in-script renderer that flows
-  // chars across the grid, distorting the mandala. Force the on-chain script
-  // to take the daydream branch instead — visually identical to terraformed
-  // mode for our purposes (cell animation only; no pointer interactions).
+  // chars across the grid, distorting the mandala. Patch the script to take
+  // the daydream branch instead — visually identical to terraformed mode for
+  // our purposes (cell animation only; no pointer interactions).
+  //
+  // For Version=2.0 tokens the v2 daydream renderer also gates the radial
+  // ring pattern behind ANTENNA > 0. Most Terrain tokens have Antenna=Off
+  // (ANTENNA=0 in the script), which would silently fall through to the
+  // non-radial branch. Force ANTENNA=1 too so users always see the v2
+  // radial pattern when previewing.
+  //
+  // Pre-v2 tokens (no Version trait, no `BIOMECODE` constant in their
+  // script) don't have the v2 renderer in their tokenHTML at all — the MODE
+  // patch alone falls through to the v0 daydream path for those, which is
+  // a known limitation pending a template-substitution fix.
   if (status === 0) {
     out = out.replace(/let\s+MODE\s*=\s*0\b/, 'let MODE=1');
+    out = out.replace(/let\s+ANTENNA\s*=\s*0\b/, 'let ANTENNA=1');
   }
   return out;
 }
