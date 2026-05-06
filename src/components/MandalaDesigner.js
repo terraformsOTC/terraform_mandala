@@ -37,8 +37,9 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
       <div className="flex flex-col gap-3 items-start">
         <h2 className="text-lg opacity-90">[preview — #{animData?.tokenId}]</h2>
         <p className="text-xs opacity-50 max-w-md">
-          Rendered with this parcel&rsquo;s on-chain font and palette. Preview only — no on-chain
-          action is taken.
+          Rendered using the parcel&rsquo;s onchain zone, biome, and chroma traits. Terrain mode
+          parcels have been simulated here in daydream mode to faithfully represent what they
+          would look like if terraformed.
         </p>
         <ParcelPreview animData={animData} heightmap={generated.heightmap} />
       </div>

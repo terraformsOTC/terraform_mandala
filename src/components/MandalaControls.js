@@ -32,7 +32,6 @@ export default function MandalaControls({ params, onChange }) {
         min={1}
         max={4}
         onChange={(variance) => update({ variance })}
-        hint="step size of the random walk"
       />
       <Slider
         label="peak height"
@@ -40,7 +39,6 @@ export default function MandalaControls({ params, onChange }) {
         min={1}
         max={9}
         onChange={(peakHeight) => update({ peakHeight })}
-        hint="max value (caps tallest cells)"
       />
       <Slider
         label="start value"
@@ -48,7 +46,6 @@ export default function MandalaControls({ params, onChange }) {
         min={0}
         max={9}
         onChange={(startValue) => update({ startValue })}
-        hint="where the walk begins"
       />
 
       <Field label="rotational order">
@@ -84,7 +81,7 @@ function Field({ label, children }) {
   );
 }
 
-function Slider({ label, value, min, max, onChange, hint }) {
+function Slider({ label, value, min, max, onChange }) {
   return (
     <Field label={`${label} — ${value}`}>
       <input
@@ -96,7 +93,6 @@ function Slider({ label, value, min, max, onChange, hint }) {
         onChange={(e) => onChange(Number(e.target.value))}
         style={{ width: '100%' }}
       />
-      {hint && <span className="text-xs opacity-40">{hint}</span>}
     </Field>
   );
 }

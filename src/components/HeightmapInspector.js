@@ -8,12 +8,6 @@ export default function HeightmapInspector({ heightmap, validation }) {
 
   if (!heightmap) return null;
 
-  const symmetries = [
-    { label: 'vertical', ok: validation.vertical_sym },
-    { label: 'horizontal', ok: validation.horizontal_sym },
-    { label: '180° rotation', ok: validation.rotational_sym },
-  ];
-
   let encoded = null;
   try {
     encoded = encode(heightmap);
@@ -32,15 +26,6 @@ export default function HeightmapInspector({ heightmap, validation }) {
 
   return (
     <div className="flex flex-col gap-3 mt-4">
-      <div className="flex flex-wrap gap-3 text-xs">
-        {symmetries.map((s) => (
-          <span key={s.label} className="opacity-80">
-            <span style={{ color: s.ok ? '#34d399' : '#f87171' }}>{s.ok ? '✓' : '✗'}</span>{' '}
-            {s.label}
-          </span>
-        ))}
-      </div>
-
       <details className="text-xs opacity-80">
         <summary className="cursor-pointer">[ascii visualisation]</summary>
         <pre className="mt-2 leading-none text-[10px] opacity-90" style={{ fontFamily: 'monospace' }}>
