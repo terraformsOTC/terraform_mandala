@@ -19,6 +19,7 @@ export async function GET(_req, { params }) {
       status,
       bg: meta.bg,
       chars: meta.chars,
+      hasV2Renderer: meta.hasV2Renderer,
       html,
     });
   } catch (err) {

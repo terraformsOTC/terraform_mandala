@@ -35,6 +35,13 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
           parcels have been simulated here in daydream mode to faithfully represent what they
           would look like if terraformed.
         </p>
+        {animData?.status === 0 && animData?.hasV2Renderer === false && (
+          <p className="text-xs opacity-50 max-w-md" style={{ color: '#f6c177' }}>
+            Note: this parcel pre-dates the v2 contract renderer (no Version=2.0 in its metadata),
+            so the preview falls back to the legacy daydream animation rather than the v2 radial
+            ring pattern. The onchain output for this parcel will look the same in daydream mode.
+          </p>
+        )}
         <ParcelPreview animData={animData} heightmap={generated.heightmap} />
       </div>
     </div>

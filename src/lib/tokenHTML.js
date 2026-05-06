@@ -55,7 +55,13 @@ export function extractAnimData(html) {
   const resource = num(html.match(/(?:const|var|let)\s+RESOURCE\s*=\s*(\d+)/));
   const direction = num(html.match(/(?:const|var|let)\s+DIRECTION\s*=\s*(\d+)/));
 
-  return { colors, bg, chars, seed, resource, direction };
+  // Pre-v2 tokens (no Version trait) ship the legacy short renderer in their
+  // tokenHTML; V=2.0 tokens ship the longer v2 renderer that defines
+  // BIOMECODE and the radial dist() formula. Use BIOMECODE as the cheap
+  // signal for "this parcel has the v2 daydream code path available".
+  const hasV2Renderer = html.includes('BIOMECODE');
+
+  return { colors, bg, chars, seed, resource, direction, hasV2Renderer };
 }
 
 function num(m) {
