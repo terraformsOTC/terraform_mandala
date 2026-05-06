@@ -51,11 +51,15 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
 export function defaultParams() {
   return {
     seed: randomSeed(),
+    algorithm: DEFAULTS.algorithm,
     variance: DEFAULTS.variance,
     peakHeight: DEFAULTS.peakHeight,
     startValue: DEFAULTS.startValue,
     rotationalOrder: DEFAULTS.rotationalOrder,
     minHeight: DEFAULTS.minHeight,
     bias: DEFAULTS.bias,
+    ringCount: DEFAULTS.ringCount,
+    smoothing: DEFAULTS.smoothing,
+    invert: DEFAULTS.invert,
   };
 }

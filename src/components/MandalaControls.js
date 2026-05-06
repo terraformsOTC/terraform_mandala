@@ -4,6 +4,7 @@ import { randomSeed } from '@/lib/seedrandom';
 
 export default function MandalaControls({ params, onChange }) {
   const update = (patch) => onChange({ ...params, ...patch });
+  const isWalk = params.algorithm !== 'rings';
 
   return (
     <div className="flex flex-col gap-4">
@@ -26,13 +27,27 @@ export default function MandalaControls({ params, onChange }) {
         </div>
       </Field>
 
-      <Slider
-        label="variance"
-        value={params.variance}
-        min={1}
-        max={4}
-        onChange={(variance) => update({ variance })}
-      />
+      <Field label="pattern">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="btn-primary btn-sm text-sm flex-1"
+            style={{ opacity: isWalk ? 1 : 0.5 }}
+            onClick={() => update({ algorithm: 'walk' })}
+          >
+            walk
+          </button>
+          <button
+            type="button"
+            className="btn-primary btn-sm text-sm flex-1"
+            style={{ opacity: !isWalk ? 1 : 0.5 }}
+            onClick={() => update({ algorithm: 'rings' })}
+          >
+            rings
+          </button>
+        </div>
+      </Field>
+
       <Slider
         label="peak height"
         value={params.peakHeight}
@@ -47,41 +62,94 @@ export default function MandalaControls({ params, onChange }) {
         max={Math.max(0, params.peakHeight - 1)}
         onChange={(minHeight) => update({ minHeight })}
       />
+
+      {isWalk && (
+        <>
+          <Slider
+            label="variance"
+            value={params.variance}
+            min={1}
+            max={4}
+            onChange={(variance) => update({ variance })}
+          />
+          <Slider
+            label="start value"
+            value={params.startValue}
+            min={params.minHeight}
+            max={params.peakHeight}
+            onChange={(startValue) => update({ startValue })}
+          />
+          <Slider
+            label="bias"
+            value={params.bias}
+            min={-2}
+            max={2}
+            onChange={(bias) => update({ bias })}
+          />
+        </>
+      )}
+
+      {!isWalk && (
+        <Slider
+          label="ring count"
+          value={params.ringCount}
+          min={2}
+          max={16}
+          onChange={(ringCount) => update({ ringCount })}
+        />
+      )}
+
       <Slider
-        label="start value"
-        value={params.startValue}
-        min={params.minHeight}
-        max={params.peakHeight}
-        onChange={(startValue) => update({ startValue })}
-      />
-      <Slider
-        label="bias"
-        value={params.bias}
-        min={-2}
-        max={2}
-        onChange={(bias) => update({ bias })}
+        label="smoothing"
+        value={params.smoothing}
+        min={0}
+        max={3}
+        onChange={(smoothing) => update({ smoothing })}
       />
 
-      <Field label="rotational order">
+      <Field label="invert">
         <div className="flex gap-2">
           <button
             type="button"
             className="btn-primary btn-sm text-sm flex-1"
-            style={{ opacity: params.rotationalOrder === 4 ? 1 : 0.5 }}
-            onClick={() => update({ rotationalOrder: 4 })}
+            style={{ opacity: !params.invert ? 1 : 0.5 }}
+            onClick={() => update({ invert: false })}
           >
-            4-fold
+            off
           </button>
           <button
             type="button"
             className="btn-primary btn-sm text-sm flex-1"
-            style={{ opacity: params.rotationalOrder === 8 ? 1 : 0.5 }}
-            onClick={() => update({ rotationalOrder: 8 })}
+            style={{ opacity: params.invert ? 1 : 0.5 }}
+            onClick={() => update({ invert: true })}
           >
-            8-fold
+            on
           </button>
         </div>
       </Field>
+
+      {isWalk && (
+        <Field label="rotational order">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.rotationalOrder === 4 ? 1 : 0.5 }}
+              onClick={() => update({ rotationalOrder: 4 })}
+            >
+              4-fold
+            </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.rotationalOrder === 8 ? 1 : 0.5 }}
+              onClick={() => update({ rotationalOrder: 8 })}
+            >
+              8-fold
+            </button>
+          </div>
+        </Field>
+      )}
     </div>
   );
 }

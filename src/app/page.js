@@ -9,7 +9,10 @@ import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
 import { DEFAULTS } from '@/lib/mandala';
 
-const SEARCH_PARAM_KEYS = ['token', 'seed', 'variance', 'peak', 'start', 'order', 'min', 'bias'];
+const SEARCH_PARAM_KEYS = [
+  'token', 'seed', 'variance', 'peak', 'start', 'order', 'min', 'bias',
+  'algo', 'rings', 'smooth', 'invert',
+];
 
 export default function Home() {
   return (
@@ -148,6 +151,10 @@ function HomeInner() {
       next.set('order', String(params.rotationalOrder));
     if (params.minHeight !== DEFAULTS.minHeight) next.set('min', String(params.minHeight));
     if (params.bias !== DEFAULTS.bias) next.set('bias', String(params.bias));
+    if (params.algorithm !== DEFAULTS.algorithm) next.set('algo', params.algorithm);
+    if (params.ringCount !== DEFAULTS.ringCount) next.set('rings', String(params.ringCount));
+    if (params.smoothing !== DEFAULTS.smoothing) next.set('smooth', String(params.smoothing));
+    if (params.invert !== DEFAULTS.invert) next.set('invert', '1');
     const qs = next.toString();
     const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
     window.history.replaceState(null, '', url);
@@ -242,11 +249,15 @@ function paramsFromUrl(searchParams) {
   };
   return {
     seed,
+    algorithm: searchParams.get('algo') === 'rings' ? 'rings' : 'walk',
     variance: num('variance', 1, 4, DEFAULTS.variance),
     peakHeight: num('peak', 1, 9, DEFAULTS.peakHeight),
     startValue: num('start', 0, 9, DEFAULTS.startValue),
     rotationalOrder: searchParams.get('order') === '8' ? 8 : 4,
     minHeight: num('min', 0, 9, DEFAULTS.minHeight),
     bias: num('bias', -2, 2, DEFAULTS.bias),
+    ringCount: num('rings', 2, 16, DEFAULTS.ringCount),
+    smoothing: num('smooth', 0, 3, DEFAULTS.smoothing),
+    invert: searchParams.get('invert') === '1',
   };
 }
