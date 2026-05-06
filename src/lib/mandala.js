@@ -27,10 +27,8 @@ export const DEFAULTS = {
   startValue: 5,
   rotationalOrder: 4,
   minHeight: 0,
-  bias: 0,
   ringCount: 6,
   smoothing: 0,
-  invert: false,
 };
 
 export function generateMandala(opts = {}) {
@@ -40,10 +38,8 @@ export function generateMandala(opts = {}) {
   const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
   const variance = clampInt(opts.variance ?? DEFAULTS.variance, 1, 4);
   const startValue = clampInt(opts.startValue ?? DEFAULTS.startValue, minHeight, peakHeight);
-  const bias = clampInt(opts.bias ?? DEFAULTS.bias, -2, 2);
   const ringCount = clampInt(opts.ringCount ?? DEFAULTS.ringCount, 2, 16);
   const smoothing = clampInt(opts.smoothing ?? DEFAULTS.smoothing, 0, 3);
-  const invert = !!opts.invert;
   const rotationalOrder = opts.rotationalOrder === 8 ? 8 : 4;
 
   const rng = makeRng(seed);
@@ -52,14 +48,13 @@ export function generateMandala(opts = {}) {
   if (algorithm === 'rings') {
     grid = generateRings(rng, ringCount, minHeight, peakHeight);
   } else {
-    const quadrant = walkQuadrant(rng, variance, peakHeight, startValue, minHeight, bias);
+    const quadrant = walkQuadrant(rng, variance, peakHeight, startValue, minHeight);
     diagonalMirror(quadrant);
     if (rotationalOrder === 8) symmetrizeMainDiagonal(quadrant);
     grid = expandToFullGrid(quadrant);
   }
 
   if (smoothing > 0) grid = smoothGrid(grid, smoothing);
-  if (invert) grid = invertGrid(grid, minHeight, peakHeight);
 
   const heightmap = grid.map((row) => row.join('')).join('');
 
@@ -76,13 +71,13 @@ function clampInt(n, lo, hi) {
   return Math.max(lo, Math.min(hi, i));
 }
 
-function walkQuadrant(rng, variance, peakHeight, startValue, minHeight, bias) {
+function walkQuadrant(rng, variance, peakHeight, startValue, minHeight) {
   const q = Array.from({ length: QUADRANT }, () => Array(QUADRANT).fill(null));
   let last = startValue;
   for (let i = 0; i < QUADRANT; i++) {
     for (let j = 0; j < QUADRANT; j++) {
       if (QUADRANT - i - 1 <= j) {
-        const step = Math.floor(rng() * (variance * 2 + 1)) - variance + bias;
+        const step = Math.floor(rng() * (variance * 2 + 1)) - variance;
         let v = last + step;
         v = Math.max(minHeight, Math.min(peakHeight, v));
         last = v;
@@ -168,11 +163,3 @@ function smoothGrid(grid, iterations) {
   return cur.map((row) => row.map(String));
 }
 
-// Per-cell reflection: keeps height inside [minHeight, peakHeight] by using
-// the user's range as the pivot rather than the absolute 0..9 range.
-function invertGrid(grid, minHeight, peakHeight) {
-  const sum = minHeight + peakHeight;
-  return grid.map((row) =>
-    row.map((c) => String(Math.max(minHeight, Math.min(peakHeight, sum - Number(c))))),
-  );
-}

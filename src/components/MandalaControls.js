@@ -79,13 +79,6 @@ export default function MandalaControls({ params, onChange }) {
             max={params.peakHeight}
             onChange={(startValue) => update({ startValue })}
           />
-          <Slider
-            label="bias"
-            value={params.bias}
-            min={-2}
-            max={2}
-            onChange={(bias) => update({ bias })}
-          />
         </>
       )}
 
@@ -106,27 +99,6 @@ export default function MandalaControls({ params, onChange }) {
         max={3}
         onChange={(smoothing) => update({ smoothing })}
       />
-
-      <Field label="invert">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="btn-primary btn-sm text-sm flex-1"
-            style={{ opacity: !params.invert ? 1 : 0.5 }}
-            onClick={() => update({ invert: false })}
-          >
-            off
-          </button>
-          <button
-            type="button"
-            className="btn-primary btn-sm text-sm flex-1"
-            style={{ opacity: params.invert ? 1 : 0.5 }}
-            onClick={() => update({ invert: true })}
-          >
-            on
-          </button>
-        </div>
-      </Field>
 
       {isWalk && (
         <Field label="rotational order">

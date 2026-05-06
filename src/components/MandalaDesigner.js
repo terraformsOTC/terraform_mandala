@@ -63,9 +63,7 @@ export function defaultParams() {
     startValue: DEFAULTS.startValue,
     rotationalOrder: DEFAULTS.rotationalOrder,
     minHeight: DEFAULTS.minHeight,
-    bias: DEFAULTS.bias,
     ringCount: DEFAULTS.ringCount,
     smoothing: DEFAULTS.smoothing,
-    invert: DEFAULTS.invert,
   };
 }
