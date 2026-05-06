@@ -174,12 +174,7 @@ function HomeInner() {
             flexed to alter the mandala animation. Those familiar with etherscan can export the
             heightmap and commit it to a parcel onchain.
           </p>
-          <p className="text-xs opacity-55 mb-6">
-            v1 is preview-only. The encoded uint256[16] array is exposed for power users who want
-            to commit via etherscan today. Wallet-connected commit/erase ships in v2.
-          </p>
-
-          <div className="flex flex-col gap-2 mb-2">
+          <div className="flex flex-col gap-2 mb-2 mt-6">
             <label className="text-xs opacity-60 uppercase tracking-wider">input parcel id</label>
             <form
               onSubmit={(e) => { e.preventDefault(); submitTokenId(); }}
