@@ -11,9 +11,15 @@ export const ABI = [
   'function ownerOf(uint256) view returns (address)',
 ];
 
+// Mapping confirmed against on-chain observation:
+//  - tokens 7173, 9686 (status 0) display as Terrain on terraforms.xyz
+//  - token 871 (status 2) was committed via commitDreamToCanvas → Terraformed
+//  - token 83 (status 3) is a genesis/1-of-1 → Origin
+// Status 1 ("Daydream") covers tokens that have called enterDream and are in
+// the editable pre-commit state. Confirmed by project context.
 const STATUS_LABELS = {
-  0: 'Daydreaming',
-  1: 'Dreaming',
+  0: 'Terrain',
+  1: 'Daydream',
   2: 'Terraformed',
   3: 'Origin',
 };
