@@ -171,9 +171,8 @@ function HomeInner() {
           <h1 className="text-2xl mb-4">heightmap mandala generator</h1>
           <p className="text-sm opacity-75 mb-3">
             Generates mandala-style heightmaps for terraform parcels. Input variables can be
-            flexed to alter the resulting mandala animation. Those familiar with etherscan can
-            export the heightmap and commit it to a parcel using the tool at the bottom of the
-            page.
+            flexed to alter the mandala animation. Those familiar with etherscan can export the
+            heightmap and commit it to a parcel onchain.
           </p>
           <p className="text-xs opacity-55 mb-6">
             v1 is preview-only. The encoded uint256[16] array is exposed for power users who want
