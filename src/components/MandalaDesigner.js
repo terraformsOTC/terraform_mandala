@@ -37,9 +37,15 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
         </p>
         {animData?.status === 0 && animData?.hasV2Renderer === false && (
           <p className="text-xs opacity-50" style={{ color: '#f6c177' }}>
-            Note: this parcel uses the v0 contract renderer, so the preview reverts to the legacy
-            daydream animation rather than the distinctive v2 radial &ldquo;antenna&rdquo;
-            pattern. The owner of this parcel can update it to v2 at any time.
+            Note:{' '}
+            {animData?.isUnminted
+              ? 'unminted parcels render with the v0 contract renderer by default,'
+              : 'this parcel uses the v0 contract renderer,'}{' '}
+            so the preview reverts to the legacy daydream animation rather than the distinctive
+            v2 radial &ldquo;antenna&rdquo; pattern.{' '}
+            {animData?.isUnminted
+              ? 'Once minted, the owner can update to v2 at any time.'
+              : 'The owner can update this parcel to v2 at any time.'}
           </p>
         )}
         <ParcelPreview animData={animData} heightmap={generated.heightmap} />

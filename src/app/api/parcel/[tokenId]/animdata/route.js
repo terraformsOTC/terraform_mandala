@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchTokenHTML, extractAnimData } from '@/lib/tokenHTML';
 import { getContract } from '@/lib/contract';
+import { isUnminted, fetchUnmintedAnimData } from '@/lib/unminted';
 
 export async function GET(_req, { params }) {
   const tokenId = Number(params.tokenId);
@@ -8,6 +9,19 @@ export async function GET(_req, { params }) {
     return NextResponse.json({ error: 'invalid tokenId' }, { status: 400 });
   }
   try {
+    if (isUnminted(tokenId)) {
+      const data = await fetchUnmintedAnimData(tokenId);
+      return NextResponse.json({
+        tokenId,
+        status: 0,
+        bg: data.bg,
+        chars: data.chars,
+        hasV2Renderer: false,
+        isUnminted: true,
+        html: data.html,
+      });
+    }
+
     const c = getContract();
     const [html, status] = await Promise.all([
       fetchTokenHTML(tokenId),
@@ -20,6 +34,7 @@ export async function GET(_req, { params }) {
       bg: meta.bg,
       chars: meta.chars,
       hasV2Renderer: meta.hasV2Renderer,
+      isUnminted: false,
       html,
     });
   } catch (err) {
