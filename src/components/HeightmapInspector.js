@@ -17,7 +17,8 @@ export default function HeightmapInspector({ heightmap }) {
     encoded = null;
   }
 
-  const arrayString = encoded ? '[' + encoded.join(',') + ']' : null;
+  const stripped = encoded ? encoded.map((h) => h.replace(/^0x/, '')) : null;
+  const arrayString = stripped ? '[' + stripped.join(',') + ']' : null;
 
   const copyArray = async () => {
     if (!arrayString) return;
@@ -49,7 +50,7 @@ export default function HeightmapInspector({ heightmap }) {
                   overflowY: 'auto',
                 }}
               >
-                {encoded.join(',\n')}
+                {stripped.join(',\n')}
               </pre>
               <div className="flex gap-2">
                 <button type="button" className="btn-primary btn-sm text-xs" onClick={copyArray}>
