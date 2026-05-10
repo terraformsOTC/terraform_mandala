@@ -9,7 +9,11 @@ export const ABI = [
   'function balanceOf(address) view returns (uint256)',
   'function tokenOfOwnerByIndex(address, uint256) view returns (uint256)',
   'function ownerOf(uint256) view returns (address)',
+  'function enterDream(uint256 tokenId)',
+  'function commitDreamToCanvas(uint256 tokenId, uint256[16] dream)',
 ];
+
+export const MAINNET_CHAIN_ID = 1n;
 
 // Mapping confirmed against on-chain observation:
 //  - tokens 7173, 9686 (status 0) display as Terrain on terraforms.xyz

@@ -6,11 +6,11 @@ import { useMemo } from 'react';
 // substituted in. Inherits font, colors, and CSS animations from the contract
 // output exactly — no re-implementation.
 
-export default function ParcelPreview({ animData, heightmap, width = 388, height = 560 }) {
+export default function ParcelPreview({ animData, heightmap, previewMode = 'v2antenna', width = 388, height = 560 }) {
   const srcDoc = useMemo(() => {
     if (!animData?.html || !heightmap) return null;
-    return buildPreviewHtml(animData, heightmap);
-  }, [animData, heightmap]);
+    return buildPreviewHtml(animData, heightmap, previewMode);
+  }, [animData, heightmap, previewMode]);
 
   if (!srcDoc) {
     return (
@@ -35,7 +35,15 @@ export default function ParcelPreview({ animData, heightmap, width = 388, height
   );
 }
 
-function buildPreviewHtml(animData, heightmap) {
+// previewMode controls which animation path the iframe renders:
+//   'v0'       — patch MODE to daydream; leave ANTENNA as-is (0 for terrain parcels).
+//                v0-token scripts show the legacy daydream; v2-token scripts show the
+//                non-antenna branch. This is the on-chain reality for old parcels.
+//   'v2'       — patch MODE to daydream; force ANTENNA=0. Shows the v2 daydream
+//                animation without the radial spire/antenna pattern.
+//   'v2antenna' — patch MODE to daydream; force ANTENNA=1. Shows the full v2 radial
+//                antenna pattern. Default, and recommended for v2-renderer tokens.
+function buildPreviewHtml(animData, heightmap, previewMode = 'v2antenna') {
   const { html, chars, status } = animData;
   const cells = new Array(1024);
   for (let i = 0; i < 1024; i++) {
@@ -48,25 +56,20 @@ function buildPreviewHtml(animData, heightmap) {
     /(<div class='r'[^>]*>)[\s\S]*?(<\/div>\s*<\/div>\s*<\/foreignObject>)/,
     `$1${cellsHtml}$2`,
   );
-  // Terrain mode (status 0) uses a different in-script renderer that flows
-  // chars across the grid, distorting the mandala. Patch the script to take
-  // the daydream branch instead — visually identical to terraformed mode for
-  // our purposes (cell animation only; no pointer interactions).
-  //
-  // For Version=2.0 tokens the v2 daydream renderer also gates the radial
-  // ring pattern behind ANTENNA > 0. Most Terrain tokens have Antenna=Off
-  // (ANTENNA=0 in the script), which would silently fall through to the
-  // non-radial branch. Force ANTENNA=1 too so users always see the v2
-  // radial pattern when previewing.
-  //
-  // Pre-v2 tokens (no Version trait, no `BIOMECODE` constant in their
-  // script) don't have the v2 renderer in their tokenHTML at all — the MODE
-  // patch alone falls through to the v0 daydream path for those, which is
-  // a known limitation pending a template-substitution fix.
+  // Terrain parcels (status 0) run MODE=0 (terrain renderer) on-chain.
+  // Patch to MODE=1 so all three preview modes show the daydream animation.
   if (status === 0) {
     out = out.replace(/let\s+MODE\s*=\s*0\b/, 'let MODE=1');
-    out = out.replace(/let\s+ANTENNA\s*=\s*0\b/, 'let ANTENNA=1');
   }
+  // ANTENNA controls the radial spire pattern in v2-renderer scripts.
+  // Apply the chosen override regardless of parcel status so the toggle works
+  // for Dreaming/Terraformed parcels too.
+  if (previewMode === 'v2antenna') {
+    out = out.replace(/let\s+ANTENNA\s*=\s*0\b/, 'let ANTENNA=1');
+  } else if (previewMode === 'v2') {
+    out = out.replace(/let\s+ANTENNA\s*=\s*1\b/, 'let ANTENNA=0');
+  }
+  // 'v0': leave ANTENNA at whatever the token script declares.
   return out;
 }
 

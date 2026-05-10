@@ -14,6 +14,7 @@ export async function GET(_req, { params }) {
       return NextResponse.json({
         tokenId,
         status: 0,
+        owner: null,
         bg: data.bg,
         chars: data.chars,
         hasV2Renderer: false,
@@ -23,14 +24,16 @@ export async function GET(_req, { params }) {
     }
 
     const c = getContract();
-    const [html, status] = await Promise.all([
+    const [html, status, owner] = await Promise.all([
       fetchTokenHTML(tokenId),
       c.tokenToStatus(tokenId).then((s) => Number(s)).catch(() => null),
+      c.ownerOf(tokenId).then((a) => String(a)).catch(() => null),
     ]);
     const meta = extractAnimData(html);
     return NextResponse.json({
       tokenId,
       status,
+      owner,
       bg: meta.bg,
       chars: meta.chars,
       hasV2Renderer: meta.hasV2Renderer,

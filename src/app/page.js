@@ -11,7 +11,7 @@ import { DEFAULTS } from '@/lib/mandala';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'smooth',
+  'algo', 'rings', 'smooth', 'terraces',
 ];
 
 export default function Home() {
@@ -41,6 +41,7 @@ function HomeInner() {
   const [tokenInput, setTokenInput] = useState(() => searchParams.get('token') || '');
   const [animData, setAnimData] = useState(null);
   const [animLoading, setAnimLoading] = useState(false);
+  const [animRefreshKey, setAnimRefreshKey] = useState(0);
 
   const [params, setParams] = useState(() => paramsFromUrl(searchParams) || defaultParams());
 
@@ -136,7 +137,7 @@ function HomeInner() {
     return () => {
       cancelled = true;
     };
-  }, [selectedTokenId]);
+  }, [selectedTokenId, animRefreshKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -152,6 +153,7 @@ function HomeInner() {
     if (params.minHeight !== DEFAULTS.minHeight) next.set('min', String(params.minHeight));
     if (params.algorithm !== DEFAULTS.algorithm) next.set('algo', params.algorithm);
     if (params.ringCount !== DEFAULTS.ringCount) next.set('rings', String(params.ringCount));
+    if (params.terraceCount !== DEFAULTS.terraceCount) next.set('terraces', String(params.terraceCount));
     if (params.smoothing !== DEFAULTS.smoothing) next.set('smooth', String(params.smoothing));
     const qs = next.toString();
     const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
@@ -224,6 +226,8 @@ function HomeInner() {
                 animData={animData}
                 params={params}
                 onParamsChange={setParams}
+                walletAddress={walletAddress}
+                onTxConfirmed={() => setAnimRefreshKey((k) => k + 1)}
               />
             )}
           </section>
@@ -243,15 +247,17 @@ function paramsFromUrl(searchParams) {
     const v = Number(searchParams.get(k));
     return Number.isInteger(v) && v >= lo && v <= hi ? v : fallback;
   };
+  const algo = searchParams.get('algo');
   return {
     seed,
-    algorithm: searchParams.get('algo') === 'rings' ? 'rings' : 'walk',
+    algorithm: algo === 'rings' ? 'rings' : algo === 'temple' ? 'temple' : 'walk',
     variance: num('variance', 1, 4, DEFAULTS.variance),
     peakHeight: num('peak', 1, 9, DEFAULTS.peakHeight),
     startValue: num('start', 0, 9, DEFAULTS.startValue),
-    rotationalOrder: searchParams.get('order') === '8' ? 8 : 4,
+    rotationalOrder: searchParams.get('order') === '2' ? 2 : searchParams.get('order') === '8' ? 8 : 4,
     minHeight: num('min', 0, 9, DEFAULTS.minHeight),
     ringCount: num('rings', 2, 16, DEFAULTS.ringCount),
+    terraceCount: num('terraces', 2, 9, DEFAULTS.terraceCount),
     smoothing: num('smooth', 0, 3, DEFAULTS.smoothing),
   };
 }

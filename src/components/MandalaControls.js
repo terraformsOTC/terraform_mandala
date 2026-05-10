@@ -4,7 +4,9 @@ import { randomSeed } from '@/lib/seedrandom';
 
 export default function MandalaControls({ params, onChange }) {
   const update = (patch) => onChange({ ...params, ...patch });
-  const isWalk = params.algorithm !== 'rings';
+  const isWalk = params.algorithm === 'walk';
+  const isRings = params.algorithm === 'rings';
+  const isTemple = params.algorithm === 'temple';
 
   return (
     <div className="flex flex-col gap-4">
@@ -40,10 +42,18 @@ export default function MandalaControls({ params, onChange }) {
           <button
             type="button"
             className="btn-primary btn-sm text-sm flex-1"
-            style={{ opacity: !isWalk ? 1 : 0.5 }}
+            style={{ opacity: isRings ? 1 : 0.5 }}
             onClick={() => update({ algorithm: 'rings' })}
           >
             rings
+          </button>
+          <button
+            type="button"
+            className="btn-primary btn-sm text-sm flex-1"
+            style={{ opacity: isTemple ? 1 : 0.5 }}
+            onClick={() => update({ algorithm: 'temple' })}
+          >
+            temple
           </button>
         </div>
       </Field>
@@ -82,13 +92,23 @@ export default function MandalaControls({ params, onChange }) {
         </>
       )}
 
-      {!isWalk && (
+      {isRings && (
         <Slider
           label="ring count"
           value={params.ringCount}
           min={2}
           max={16}
           onChange={(ringCount) => update({ ringCount })}
+        />
+      )}
+
+      {isTemple && (
+        <Slider
+          label="terrace count"
+          value={params.terraceCount}
+          min={2}
+          max={9}
+          onChange={(terraceCount) => update({ terraceCount })}
         />
       )}
 
@@ -103,6 +123,14 @@ export default function MandalaControls({ params, onChange }) {
       {isWalk && (
         <Field label="rotational order">
           <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.rotationalOrder === 2 ? 1 : 0.5 }}
+              onClick={() => update({ rotationalOrder: 2 })}
+            >
+              2-fold
+            </button>
             <button
               type="button"
               className="btn-primary btn-sm text-sm flex-1"

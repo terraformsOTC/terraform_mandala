@@ -58,13 +58,28 @@ Heightmap is 1024 chars (digits 0–9), arranged as 32 rows × 32 cols (row-majo
 
 ## TODO
 
-- **SEO / OpenGraph**: layout.js metadata is sketched but there's no `og-image.png`, no canonical structured data, no sitemap. Generate a 1200×630 OG image (mandala on dark bg with the title), drop it in `/public/og-image.png`, add Twitter card image, add a `/sitemap.xml` route. Check that estimator + lore use a consistent OG image style.
-- **Favicon variants**: ship a 32×32 PNG and apple-touch-icon alongside the SVG.
+(currently empty)
 
-## Out of scope (parking lot for v2)
+## Onchain actions (v2)
 
-- `enterDream` / `commitDreamToCanvas` write transactions (the encoded array is exposed for power users to commit via Etherscan today).
-- "Erase drawing" via re-calling `enterDream`.
+- `DreamActions.js` gates buttons on (wallet connected) + (owner === connected) + status:
+  - status 0 (Terrain) → `[enter daydream mode]` calls `enterDream`
+  - status 1 (Daydream) → `[commit dream to canvas]` calls `commitDreamToCanvas` with the encoded `uint256[16]`
+  - status 2 (Terraformed) → `[erase drawing]` re-calls `enterDream`
+  - status 3 (Origin) and unminted parcels are hard-locked
+- `src/lib/wallet.js` wraps the writes via ethers v6 `BrowserProvider` + signer, asserts mainnet (chainId 1n) before signing.
+- `src/app/api/parcel/[tokenId]/animdata` returns `owner` (null for unminted) for the ownership gate.
+- After tx confirms (`tx.wait(1)`), `page.js` bumps `animRefreshKey` and the animdata refetches. Server-side `tokenHTML` cache (60s TTL) may briefly serve stale rendered HTML; status flips immediately because that fetch isn't cached.
+
+## SEO / OpenGraph
+
+- `src/app/opengraph-image.js` renders a 1200×630 PNG via `next/og` ImageResponse — left side is a static rings mandala in ASCII ramp, right side is the title + tagline. Twitter image re-exports it.
+- `src/app/apple-icon.js` renders a 180×180 "TM" mark. `app/icon.svg` is the favicon.
+- `src/app/sitemap.js` and `src/app/robots.js` implement Next 14 metadata routes.
+- vercel/og constraint: every `<div>` with multiple children needs explicit `display: flex` (or none). Unicode glyphs trigger Google Font fetches that fail in the build sandbox — stick to ASCII inside ImageResponse.
+
+## Out of scope (parking lot)
+
 - Interactive 32×32 grid painter (mirror brush).
 - Curated mandala template library (incl. user's existing Heightmap A and B).
 - Mode-switching UI beyond a read-only status badge.
