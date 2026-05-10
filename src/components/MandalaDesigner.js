@@ -9,9 +9,8 @@ import DreamActions from './DreamActions';
 import { randomSeed } from '@/lib/seedrandom';
 
 const PREVIEW_MODES = [
-  { id: 'v0',        label: 'v0' },
-  { id: 'v2',        label: 'v2' },
-  { id: 'v2antenna', label: 'v2 + antenna' },
+  { id: 'on',  label: 'antenna on' },
+  { id: 'off', label: 'antenna off' },
 ];
 
 export default function MandalaDesigner({
@@ -21,7 +20,7 @@ export default function MandalaDesigner({
   walletAddress,
   onTxConfirmed,
 }) {
-  const [previewMode, setPreviewMode] = useState('v2antenna');
+  const [previewMode, setPreviewMode] = useState('on');
 
   const generated = useMemo(() => {
     try {
@@ -57,7 +56,7 @@ export default function MandalaDesigner({
         </p>
 
         <div className="flex flex-col gap-1">
-          <span className="text-xs opacity-60 uppercase tracking-wider">renderer</span>
+          <span className="text-xs opacity-60 uppercase tracking-wider">antenna</span>
           <div className="flex gap-2">
             {PREVIEW_MODES.map(({ id, label }) => (
               <button
@@ -73,8 +72,9 @@ export default function MandalaDesigner({
           </div>
           {animData?.hasV2Renderer === false && (
             <p className="text-xs opacity-40 mt-1">
-              {animData?.isUnminted ? 'Unminted parcel uses' : 'This parcel uses'} the v0 onchain
-              renderer — v2 modes preview the animation style only.
+              This parcel is currently pointing at the v0 renderer, which has no antenna pattern,
+              so the toggle has no visible effect. The owner can switch the renderer pointer to v2
+              at any time to enable it.
             </p>
           )}
         </div>

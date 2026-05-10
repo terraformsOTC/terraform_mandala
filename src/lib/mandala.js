@@ -21,7 +21,7 @@ const QUADRANT = 16;
 const SIDE = 32;
 
 export const DEFAULTS = {
-  algorithm: 'walk',
+  algorithm: 'classic',
   variance: 2,
   peakHeight: 9,
   startValue: 5,
@@ -35,7 +35,7 @@ export const DEFAULTS = {
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
   const rawAlgo = opts.algorithm;
-  const algorithm = rawAlgo === 'rings' ? 'rings' : rawAlgo === 'temple' ? 'temple' : 'walk';
+  const algorithm = rawAlgo === 'rings' ? 'rings' : rawAlgo === 'temple' ? 'temple' : 'classic';
   const peakHeight = clampInt(opts.peakHeight ?? DEFAULTS.peakHeight, 1, 9);
   const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
   const variance = clampInt(opts.variance ?? DEFAULTS.variance, 1, 4);
@@ -166,59 +166,141 @@ function generateRings(rng, ringCount, minHeight, peakHeight) {
   return grid;
 }
 
-// Temple generator: concentric square terraces (Chebyshev distance) rising to a central
-// spire, with optional 4-fold-symmetric satellite spires at the corner positions of
-// each terrace — inspired by Borobudur, Angkor Wat, and similar pyramid-temple plans.
-// Symmetry is enforced explicitly after floating-point accumulation so validate() always passes.
+// Temple generator: a Chebyshev-stepped pyramid with a multi-tier central spire,
+// Borobudur-style satellite stupas around inner terraces, optional ridge walls
+// along terrace edges, and optional cardinal "gateway" notches. All features are
+// 4-fold symmetric by construction; final averaging step guarantees validate().
+//
+// Per-seed variation comes from: variable terrace widths and heights, spire-tier
+// count (2 or 3), per-terrace stupa decisions and counts (4 or 8 around perimeter),
+// and probabilistic ridge/notch features.
 function generateTemple(rng, terraceCount, minHeight, peakHeight) {
-  const cx = (SIDE - 1) / 2; // 15.5 — exact center between pixels 15 and 16
+  const cx = (SIDE - 1) / 2; // 15.5
   const range = peakHeight - minHeight;
+  const maxRadius = cx + 0.5; // 16
 
-  // Base: Chebyshev (L-infinity) distance from center → stepped square terraces.
-  const raw = Array.from({ length: SIDE }, (_, i) =>
-    Array.from({ length: SIDE }, (_, j) => {
-      const d = Math.max(Math.abs(i - cx), Math.abs(j - cx));
-      const norm = d / (cx + 0.5); // 0 = center, 1 = outermost corner
-      const tIdx = Math.min(terraceCount - 1, Math.floor(norm * terraceCount));
-      return peakHeight - Math.round((tIdx * range) / Math.max(terraceCount - 1, 1));
-    })
-  );
+  // ── Variable terrace widths: each terrace carries a weight in [0.6, 1.4] ──
+  const weights = Array.from({ length: terraceCount }, () => 0.6 + rng() * 0.8);
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  const radii = []; // outer Chebyshev radius of each terrace
+  let acc = 0;
+  for (let t = 0; t < terraceCount; t++) {
+    acc += weights[t];
+    radii.push((acc / totalWeight) * maxRadius);
+  }
 
-  // Central spire: Gaussian bump centred on (cx, cx).
-  const spireSigma = 1.2 + rng() * 1.8;
-  const spireAmp = Math.round(range * (0.3 + rng() * 0.5));
-  for (let i = 0; i < SIDE; i++) {
-    for (let j = 0; j < SIDE; j++) {
-      const d2 = (i - cx) ** 2 + (j - cx) ** 2;
-      raw[i][j] = Math.min(peakHeight,
-        raw[i][j] + Math.round(spireAmp * Math.exp(-d2 / (2 * spireSigma ** 2)))
-      );
+  // ── Variable terrace heights: strictly decreasing, varied step sizes ──
+  const terraceHeights = [];
+  let h = peakHeight;
+  for (let t = 0; t < terraceCount; t++) {
+    terraceHeights.push(h);
+    if (t < terraceCount - 1) {
+      const remaining = terraceCount - t - 1;
+      const targetDrop = (h - minHeight) / (remaining + 1);
+      const jitter = 0.7 + rng() * 0.6; // 0.7–1.3
+      const drop = Math.max(1, Math.round(targetDrop * jitter));
+      h = Math.max(minHeight, h - drop);
     }
   }
 
-  // Corner spires: four Gaussian bumps at (cx ± sd, cx ± sd), 4-fold symmetric.
-  if (rng() > 0.35) {
-    const sd = 5.5 + rng() * 4; // radial distance 5.5–9.5 cells from centre
-    const csAmp = Math.round(range * (0.15 + rng() * 0.25));
-    const csSig = 0.7 + rng() * 1.1;
-    const corners = [
-      [cx - sd, cx - sd], [cx - sd, cx + sd],
-      [cx + sd, cx - sd], [cx + sd, cx + sd],
+  // ── Build pyramid base ──
+  const raw = Array.from({ length: SIDE }, (_, i) =>
+    Array.from({ length: SIDE }, (_, j) => {
+      const d = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+      let tIdx = 0;
+      while (tIdx < terraceCount - 1 && d > radii[tIdx]) tIdx++;
+      return terraceHeights[tIdx];
+    })
+  );
+
+  // ── Ridge walls along terrace edges (60% of seeds) ──
+  if (rng() > 0.4) {
+    const ridgeBoost = 1 + Math.floor(rng() * 2); // +1 or +2
+    const ridgeBand = 0.55;
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const d = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+        for (let t = 0; t < terraceCount - 1; t++) {
+          if (Math.abs(d - radii[t]) < ridgeBand) {
+            raw[i][j] = Math.min(peakHeight, raw[i][j] + ridgeBoost);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // ── Multi-tier central spire (2 or 3 stacked Gaussians) ──
+  const tierCount = 2 + Math.floor(rng() * 2);
+  for (let tier = 0; tier < tierCount; tier++) {
+    const sigma = 2.6 - tier * 0.7; // 2.6, 1.9, 1.2
+    const amp = Math.round(range * (0.2 + tier * 0.18 + rng() * 0.12));
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const d2 = (i - cx) ** 2 + (j - cx) ** 2;
+        raw[i][j] = Math.min(peakHeight,
+          raw[i][j] + Math.round(amp * Math.exp(-d2 / (2 * sigma ** 2)))
+        );
+      }
+    }
+  }
+
+  // ── Borobudur-style mini-stupas: small Gaussian bumps placed symmetrically
+  //    around the perimeter of select inner terraces ──
+  for (let t = 1; t < terraceCount - 1; t++) {
+    if (rng() > 0.55) continue; // skip ~45% of eligible terraces
+    const innerR = radii[t - 1];
+    const outerR = radii[t];
+    const stupaR = (innerR + outerR) / 2; // place mid-terrace
+    if (stupaR < 1.5) continue; // too close to centre — would smear the spire
+    const eightFold = rng() > 0.5;
+    const stupaSig = 0.5 + rng() * 0.5;
+    const stupaAmp = range * (0.12 + rng() * 0.22);
+
+    const dDiag = stupaR / Math.sqrt(2);
+    const positions = [
+      [cx - dDiag, cx - dDiag], [cx - dDiag, cx + dDiag],
+      [cx + dDiag, cx - dDiag], [cx + dDiag, cx + dDiag],
     ];
+    if (eightFold) {
+      positions.push(
+        [cx, cx - stupaR], [cx, cx + stupaR],
+        [cx - stupaR, cx], [cx + stupaR, cx],
+      );
+    }
+
     for (let i = 0; i < SIDE; i++) {
       for (let j = 0; j < SIDE; j++) {
         let bump = 0;
-        for (const [ri, ci] of corners) {
+        for (const [ri, ci] of positions) {
           const d2 = (i - ri) ** 2 + (j - ci) ** 2;
-          bump += csAmp * Math.exp(-d2 / (2 * csSig ** 2));
+          bump += stupaAmp * Math.exp(-d2 / (2 * stupaSig ** 2));
         }
         raw[i][j] = Math.min(peakHeight, raw[i][j] + Math.round(bump));
       }
     }
   }
 
-  // Enforce exact 4-fold symmetry: snap all four mirror-image cells to their
-  // rounded average. Guards against float-rounding divergence in the loops above.
+  // ── Cardinal gateway notches (50% of seeds): lower channels along N/S/E/W ──
+  if (rng() > 0.5) {
+    const notchDepth = 1 + Math.floor(rng() * 2);
+    const notchWidth = 0.55 + rng() * 0.65;
+    const innerProtect = 4; // never cut into the central spire region
+    const outerLimit = radii[terraceCount - 1] - 0.5;
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const dx = Math.abs(j - cx);
+        const dy = Math.abs(i - cx);
+        const onAxis = dx < notchWidth || dy < notchWidth;
+        const dCenter = Math.max(dx, dy);
+        if (onAxis && dCenter > innerProtect && dCenter < outerLimit) {
+          raw[i][j] = Math.max(minHeight, raw[i][j] - notchDepth);
+        }
+      }
+    }
+  }
+
+  // ── Enforce exact 4-fold symmetry (guards against float-rounding drift) ──
   for (let i = 0; i <= 15; i++) {
     for (let j = 0; j <= 15; j++) {
       const i2 = 31 - i;

@@ -250,7 +250,7 @@ function paramsFromUrl(searchParams) {
   const algo = searchParams.get('algo');
   return {
     seed,
-    algorithm: algo === 'rings' ? 'rings' : algo === 'temple' ? 'temple' : 'walk',
+    algorithm: algo === 'rings' ? 'rings' : algo === 'temple' ? 'temple' : 'classic',
     variance: num('variance', 1, 4, DEFAULTS.variance),
     peakHeight: num('peak', 1, 9, DEFAULTS.peakHeight),
     startValue: num('start', 0, 9, DEFAULTS.startValue),

@@ -4,7 +4,7 @@ import { randomSeed } from '@/lib/seedrandom';
 
 export default function MandalaControls({ params, onChange }) {
   const update = (patch) => onChange({ ...params, ...patch });
-  const isWalk = params.algorithm === 'walk';
+  const isClassic = params.algorithm === 'classic';
   const isRings = params.algorithm === 'rings';
   const isTemple = params.algorithm === 'temple';
 
@@ -34,10 +34,10 @@ export default function MandalaControls({ params, onChange }) {
           <button
             type="button"
             className="btn-primary btn-sm text-sm flex-1"
-            style={{ opacity: isWalk ? 1 : 0.5 }}
-            onClick={() => update({ algorithm: 'walk' })}
+            style={{ opacity: isClassic ? 1 : 0.5 }}
+            onClick={() => update({ algorithm: 'classic' })}
           >
-            walk
+            classic
           </button>
           <button
             type="button"
@@ -73,7 +73,7 @@ export default function MandalaControls({ params, onChange }) {
         onChange={(minHeight) => update({ minHeight })}
       />
 
-      {isWalk && (
+      {isClassic && (
         <>
           <Slider
             label="variance"
@@ -120,7 +120,7 @@ export default function MandalaControls({ params, onChange }) {
         onChange={(smoothing) => update({ smoothing })}
       />
 
-      {isWalk && (
+      {isClassic && (
         <Field label="rotational order">
           <div className="flex gap-2">
             <button
