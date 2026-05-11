@@ -55,30 +55,35 @@ export default function MandalaDesigner({
 }
 
 function ParcelMeta({ animData }) {
-  const rows = [
-    animData.seed != null   && { label: 'seed',    value: String(animData.seed) },
-    animData.blade          && { label: 'blade',   value: animData.blade, mono: true },
-    animData.chroma         && { label: 'chroma',  value: animData.chroma },
-  ].filter(Boolean);
-
-  if (rows.length === 0) return null;
+  if (!animData) return null;
 
   return (
-    <div className="flex flex-col gap-1 w-full" style={{ maxWidth: 388 }}>
-      {rows.map(({ label, value, mono }) => (
-        <div key={label} className="flex gap-3 items-baseline text-xs">
-          <span className="opacity-50 uppercase tracking-wider shrink-0" style={{ minWidth: '3.5rem' }}>
-            {label}
-          </span>
-          <span
-            className="opacity-80 overflow-x-auto whitespace-nowrap"
-            style={mono ? { fontFamily: 'monospace' } : undefined}
-            title={value}
-          >
-            {value}
+    <div className="flex flex-col gap-1 w-full text-xs" style={{ maxWidth: 388 }}>
+      {animData.seed != null && (
+        <MetaRow label="seed" value={String(animData.seed)} />
+      )}
+      {animData.blade && (
+        <div className="flex flex-col gap-0.5">
+          <span className="opacity-50 uppercase tracking-wider">blade</span>
+          <span className="opacity-80 break-all" style={{ fontFamily: 'monospace' }}>
+            {animData.blade}
           </span>
         </div>
-      ))}
+      )}
+      {animData.chroma && (
+        <MetaRow label="chroma" value={animData.chroma} />
+      )}
+    </div>
+  );
+}
+
+function MetaRow({ label, value }) {
+  return (
+    <div className="flex gap-3 items-baseline">
+      <span className="opacity-50 uppercase tracking-wider shrink-0" style={{ minWidth: '3.5rem' }}>
+        {label}
+      </span>
+      <span className="opacity-80">{value}</span>
     </div>
   );
 }
