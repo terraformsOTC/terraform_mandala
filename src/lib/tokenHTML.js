@@ -1,4 +1,41 @@
-import { getContract } from './contract.js';
+import { getContract, getV2RendererContract } from './contract.js';
+
+// Global seed is a contract constant after reveal — cache indefinitely.
+let _globalSeed = null;
+async function globalSeed() {
+  if (_globalSeed != null) return _globalSeed;
+  _globalSeed = await getContract().seed();
+  return _globalSeed;
+}
+
+// tokenToPlacement is also permanent per token — cache indefinitely.
+const _placementCache = new Map();
+async function tokenPlacement(tokenId) {
+  if (_placementCache.has(tokenId)) return _placementCache.get(tokenId);
+  const p = await getContract().tokenToPlacement(tokenId);
+  _placementCache.set(tokenId, p);
+  return p;
+}
+
+// Fetch the v2 renderer's HTML for any token regardless of its on-chain renderer
+// index. Always passes status=1 (Daydream) so the preview shows the v2 animation.
+// yearsOfDecay is permanently 0 (dreamers > 500 since 2022). canvasData is empty
+// because v0 tokens have no committed canvas, and we're simulating daydream mode.
+export async function fetchV2TokenHTML(tokenId) {
+  const key = `v2:${tokenId}`;
+  const hit = cacheGet(key);
+  if (hit) return hit;
+  const [seed, placement] = await Promise.all([globalSeed(), tokenPlacement(tokenId)]);
+  const html = await getV2RendererContract().tokenHTML(
+    1,         // status: force Daydream
+    placement,
+    seed,
+    0,         // yearsOfDecay: permanently 0
+    [],        // canvasData: empty (no committed heightmap)
+  );
+  cacheSet(key, html);
+  return html;
+}
 
 // LRU cache. tokenHTML output depends on token state (changes when a dream is
 // committed/erased), so we use a short TTL rather than caching indefinitely.

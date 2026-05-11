@@ -2,15 +2,26 @@ import { JsonRpcProvider, Contract } from 'ethers';
 
 export const TERRAFORMS_ADDRESS = '0x4E1f41613c9084FdB9E34E11fAE9412427480e56';
 
+// v2 renderer contract — called directly to get v2 HTML for any token regardless
+// of which renderer index it currently points to on the main contract.
+// Address confirmed by reading tokenURIAddresses(2) from the main contract.
+export const V2_RENDERER_ADDRESS = '0x8aF860C8F157F4E3B6A54913BFA6Bb96ab2605C2';
+
 export const ABI = [
   'function tokenURI(uint256) view returns (string)',
   'function tokenHTML(uint256) view returns (string)',
   'function tokenToStatus(uint256) view returns (uint8)',
+  'function tokenToPlacement(uint256) view returns (uint256)',
+  'function seed() view returns (uint256)',
   'function balanceOf(address) view returns (uint256)',
   'function tokenOfOwnerByIndex(address, uint256) view returns (uint256)',
   'function ownerOf(uint256) view returns (address)',
   'function enterDream(uint256 tokenId)',
   'function commitDreamToCanvas(uint256 tokenId, uint256[16] dream)',
+];
+
+const V2_RENDERER_ABI = [
+  'function tokenHTML(uint256 status, uint256 placement, uint256 seed, uint256 yearsOfDecay, uint256[] calldata canvasData) view returns (string)',
 ];
 
 export const MAINNET_CHAIN_ID = 1n;
@@ -43,4 +54,8 @@ export function getProvider() {
 
 export function getContract() {
   return new Contract(TERRAFORMS_ADDRESS, ABI, getProvider());
+}
+
+export function getV2RendererContract() {
+  return new Contract(V2_RENDERER_ADDRESS, V2_RENDERER_ABI, getProvider());
 }

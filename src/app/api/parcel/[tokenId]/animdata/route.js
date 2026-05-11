@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchTokenHTML, extractAnimData } from '@/lib/tokenHTML';
+import { fetchTokenHTML, fetchV2TokenHTML, extractAnimData } from '@/lib/tokenHTML';
 import { getContract } from '@/lib/contract';
 import { isUnminted, fetchUnmintedAnimData } from '@/lib/unminted';
 
@@ -29,19 +29,28 @@ export async function GET(_req, { params }) {
       c.tokenToStatus(tokenId).then((s) => Number(s)).catch(() => null),
       c.ownerOf(tokenId).then((a) => String(a)).catch(() => null),
     ]);
-    const meta = extractAnimData(html);
+    let meta = extractAnimData(html);
+    let previewHtml = html;
+
+    // For v0 parcels: fetch directly from the v2 renderer contract so the
+    // preview shows the full v2 daydream animation with blade + chroma data.
+    if (!meta.hasV2Renderer) {
+      previewHtml = await fetchV2TokenHTML(tokenId);
+      meta = extractAnimData(previewHtml);
+    }
+
     return NextResponse.json({
       tokenId,
       status,
       owner,
       bg: meta.bg,
       chars: meta.chars,
-      hasV2Renderer: meta.hasV2Renderer,
+      hasV2Renderer: true,
       seed: meta.seed,
       blade: meta.blade,
       chroma: meta.chroma,
       isUnminted: false,
-      html,
+      html: previewHtml,
     });
   } catch (err) {
     console.error('[animdata]', err.message);
