@@ -51,11 +51,24 @@ export function extractAnimData(html) {
     if (chars[m[1]] === undefined) chars[m[1]] = m[2];
   }
 
-  const seed = num(html.match(/(?:const|var|let)\s+SEED\s*=\s*(\d+)/));
+  const seed = num(html.match(/(?:const|var|let)\s+SEED\s*=\s*(\d+)/) || html.match(/SEED=(\d+)/));
+  const biome = num(html.match(/(?:const|var|let)\s+BIOME\s*=\s*(\d+)/) || html.match(/BIOME=(\d+)/));
   const resource = num(html.match(/(?:const|var|let)\s+RESOURCE\s*=\s*(\d+)/));
   const direction = num(html.match(/(?:const|var|let)\s+DIRECTION\s*=\s*(\d+)/));
-  const blade = str(html.match(/(?:const|var|let)\s+BLADE\s*=\s*["']([^"'\n]+)["']/));
-  const chroma = str(html.match(/(?:const|var|let)\s+CHROMA\s*=\s*["']([^"'\n]+)["']/));
+
+  // BLADE is computed at runtime: bladeRailSequencer[(BIOME+SEED) % len]
+  // We reconstruct it here from the static array in the script.
+  let blade = null;
+  const bladeArrMatch = html.match(/bladeRailSequencer=(\[[\s\S]*?\])/);
+  if (bladeArrMatch && seed != null && biome != null) {
+    try {
+      const blades = JSON.parse(bladeArrMatch[1]);
+      blade = blades[(biome + seed) % blades.length] ?? null;
+    } catch { /* malformed array — leave null */ }
+  }
+
+  // CHROMA is a static string constant (single or double quoted)
+  const chroma = str(html.match(/CHROMA=['"]([^'"]+)['"]/));
 
   // Pre-v2 tokens (no Version trait) ship the legacy short renderer in their
   // tokenHTML; V=2.0 tokens ship the longer v2 renderer that defines
