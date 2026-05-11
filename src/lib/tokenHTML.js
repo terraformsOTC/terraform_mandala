@@ -54,6 +54,8 @@ export function extractAnimData(html) {
   const seed = num(html.match(/(?:const|var|let)\s+SEED\s*=\s*(\d+)/));
   const resource = num(html.match(/(?:const|var|let)\s+RESOURCE\s*=\s*(\d+)/));
   const direction = num(html.match(/(?:const|var|let)\s+DIRECTION\s*=\s*(\d+)/));
+  const blade = str(html.match(/(?:const|var|let)\s+BLADE\s*=\s*["']([^"'\n]+)["']/));
+  const chroma = str(html.match(/(?:const|var|let)\s+CHROMA\s*=\s*["']([^"'\n]+)["']/));
 
   // Pre-v2 tokens (no Version trait) ship the legacy short renderer in their
   // tokenHTML; V=2.0 tokens ship the longer v2 renderer that defines
@@ -61,9 +63,13 @@ export function extractAnimData(html) {
   // signal for "this parcel has the v2 daydream code path available".
   const hasV2Renderer = html.includes('BIOMECODE');
 
-  return { colors, bg, chars, seed, resource, direction, hasV2Renderer };
+  return { colors, bg, chars, seed, resource, direction, blade, chroma, hasV2Renderer };
 }
 
 function num(m) {
   return m ? Number(m[1]) : null;
+}
+
+function str(m) {
+  return m ? m[1] : null;
 }

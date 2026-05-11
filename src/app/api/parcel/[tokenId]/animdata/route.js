@@ -37,6 +37,9 @@ export async function GET(_req, { params }) {
       bg: meta.bg,
       chars: meta.chars,
       hasV2Renderer: meta.hasV2Renderer,
+      seed: meta.seed,
+      blade: meta.blade,
+      chroma: meta.chroma,
       isUnminted: false,
       html,
     });

@@ -1,17 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { generateMandala, DEFAULTS } from '@/lib/mandala';
 import MandalaControls from './MandalaControls';
 import HeightmapInspector from './HeightmapInspector';
 import ParcelPreview from './ParcelPreview';
 import DreamActions from './DreamActions';
 import { randomSeed } from '@/lib/seedrandom';
-
-const PREVIEW_MODES = [
-  { id: 'on',  label: 'antenna on' },
-  { id: 'off', label: 'antenna off' },
-];
 
 export default function MandalaDesigner({
   animData,
@@ -20,8 +15,6 @@ export default function MandalaDesigner({
   walletAddress,
   onTxConfirmed,
 }) {
-  const [previewMode, setPreviewMode] = useState('on');
-
   const generated = useMemo(() => {
     try {
       return generateMandala(params);
@@ -51,40 +44,46 @@ export default function MandalaDesigner({
       <div className="flex flex-col gap-3 items-start">
         <h2 className="text-lg opacity-90">[preview — #{animData?.tokenId}]</h2>
         <p className="text-xs opacity-50">
-          Rendered using the parcel&rsquo;s onchain zone, biome, and chroma traits. Terrain mode
-          parcels are simulated in daydream mode.
+          Rendered using the parcel&rsquo;s onchain zone, biome, and chroma traits. Daydream mode
+          with antenna, forced for all parcels regardless of on-chain renderer version.
         </p>
 
-        <div className="flex flex-col gap-1">
-          <span className="text-xs opacity-60 uppercase tracking-wider">antenna</span>
-          <div className="flex gap-2">
-            {PREVIEW_MODES.map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                className="btn-primary btn-sm text-xs"
-                style={{ opacity: previewMode === id ? 1 : 0.5 }}
-                onClick={() => setPreviewMode(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {animData?.hasV2Renderer === false && (
-            <p className="text-xs opacity-40 mt-1">
-              This parcel is currently pointing at the v0 renderer, which has no antenna pattern,
-              so the toggle has no visible effect. The owner can switch the renderer pointer to v2
-              at any time to enable it.
-            </p>
-          )}
-        </div>
+        {animData && <ParcelMeta animData={animData} />}
 
         <ParcelPreview
           animData={animData}
           heightmap={generated.heightmap}
-          previewMode={previewMode}
         />
       </div>
+    </div>
+  );
+}
+
+function ParcelMeta({ animData }) {
+  const rows = [
+    animData.seed != null   && { label: 'seed',    value: String(animData.seed) },
+    animData.blade          && { label: 'blade',   value: animData.blade, mono: true },
+    animData.chroma         && { label: 'chroma',  value: animData.chroma },
+  ].filter(Boolean);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-1 w-full" style={{ maxWidth: 388 }}>
+      {rows.map(({ label, value, mono }) => (
+        <div key={label} className="flex gap-3 items-baseline text-xs">
+          <span className="opacity-50 uppercase tracking-wider shrink-0" style={{ minWidth: '3.5rem' }}>
+            {label}
+          </span>
+          <span
+            className="opacity-80 overflow-x-auto whitespace-nowrap"
+            style={mono ? { fontFamily: 'monospace' } : undefined}
+            title={value}
+          >
+            {value}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
