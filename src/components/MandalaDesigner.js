@@ -29,12 +29,7 @@ export default function MandalaDesigner({
         <h2 className="text-lg opacity-90">[animation controls]</h2>
         <MandalaControls params={params} onChange={onParamsChange} />
         <HeightmapInspector heightmap={generated.heightmap} />
-        <DreamActions
-          animData={animData}
-          walletAddress={walletAddress}
-          heightmap={generated.heightmap}
-          onConfirmed={onTxConfirmed}
-        />
+        {/* DreamActions temporarily disabled with wallet connect */}
         {generated.error && (
           <p className="text-xs" style={{ color: '#f87171' }}>
             generator error: {generated.error}

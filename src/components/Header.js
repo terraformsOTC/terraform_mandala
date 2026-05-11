@@ -36,15 +36,7 @@ export default function Header({ walletAddress, onConnect, onDisconnect }) {
           >
             [dream timeline ↗]
           </a>
-          {walletAddress ? (
-            <button className="btn-primary btn-sm" onClick={onDisconnect} title="Click to disconnect">
-              {short}
-            </button>
-          ) : (
-            <button className="btn-primary btn-sm" onClick={onConnect}>
-              connect wallet
-            </button>
-          )}
+          {/* wallet connect temporarily disabled */}
         </div>
       </nav>
     </header>

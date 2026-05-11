@@ -203,18 +203,7 @@ function HomeInner() {
           </form>
         </div>
 
-        {walletAddress && (
-          <section className="mt-8">
-            <h2 className="text-lg mb-2 opacity-80">[your parcels]</h2>
-            <ParcelGrid
-              parcels={parcels}
-              selectedTokenId={selectedTokenId}
-              onSelect={setSelectedTokenId}
-              loading={parcelsLoading}
-              address={walletAddress}
-            />
-          </section>
-        )}
+        {/* wallet parcels section temporarily disabled */}
 
         {selectedTokenId != null && (
           <section className="mt-10 pt-6 border-t border-current border-opacity-10">
