@@ -7,6 +7,7 @@ import { TERRAFORMS_ADDRESS } from '@/lib/contract';
 
 export default function HeightmapInspector({ heightmap }) {
   const [copiedAll, setCopiedAll] = useState(false);
+  const [vizOpen, setVizOpen] = useState(true);
 
   if (!heightmap) return null;
 
@@ -29,7 +30,11 @@ export default function HeightmapInspector({ heightmap }) {
 
   return (
     <div className="flex flex-col gap-3 mt-4">
-      <details className="text-xs opacity-80">
+      <details
+        className="text-xs opacity-80"
+        open={vizOpen}
+        onToggle={(e) => setVizOpen(e.currentTarget.open)}
+      >
         <summary className="cursor-pointer">[ascii visualisation]</summary>
         <pre className="mt-2 leading-none text-[10px] opacity-90" style={{ fontFamily: 'monospace' }}>
 {asciiViz(heightmap)}

@@ -107,13 +107,17 @@ export function extractAnimData(html) {
   // CHROMA is a static string constant (single or double quoted)
   const chroma = str(html.match(/CHROMA=['"]([^'"]+)['"]/));
 
+  // ZONE and BIOMECODE are string constants defined in the v2 renderer.
+  const zone = str(html.match(/ZONE=['"]([^'"]+)['"]/));
+  const biomecode = str(html.match(/BIOMECODE=['"]([^'"]+)['"]/));
+
   // Pre-v2 tokens (no Version trait) ship the legacy short renderer in their
   // tokenHTML; V=2.0 tokens ship the longer v2 renderer that defines
   // BIOMECODE and the radial dist() formula. Use BIOMECODE as the cheap
   // signal for "this parcel has the v2 daydream code path available".
   const hasV2Renderer = html.includes('BIOMECODE');
 
-  return { colors, bg, chars, seed, resource, direction, blade, chroma, hasV2Renderer };
+  return { colors, bg, chars, seed, biome, resource, direction, blade, chroma, zone, biomecode, hasV2Renderer };
 }
 
 function num(m) {

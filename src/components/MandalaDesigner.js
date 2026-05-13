@@ -58,32 +58,43 @@ function ParcelMeta({ animData }) {
   if (!animData) return null;
 
   return (
-    <div className="flex flex-col gap-1 w-full text-xs" style={{ maxWidth: 388 }}>
-      {animData.seed != null && (
-        <MetaRow label="seed" value={String(animData.seed)} />
-      )}
+    <div className="flex flex-col gap-0.5 w-full text-xs" style={{ fontFamily: 'monospace' }}>
       {animData.blade && (
-        <div className="flex flex-col gap-0.5">
-          <span className="opacity-50 uppercase tracking-wider">blade</span>
-          <span className="opacity-80 break-all" style={{ fontFamily: 'monospace' }}>
-            {animData.blade}
-          </span>
+        <div className="flex items-baseline gap-1.5 w-full overflow-hidden">
+          <span className="opacity-50 uppercase tracking-wider shrink-0">BLADE:</span>
+          <span className="opacity-80 whitespace-nowrap overflow-hidden">{animData.blade}</span>
+        </div>
+      )}
+      {animData.biomecode && (
+        <div className="flex items-baseline gap-1.5">
+          <span className="opacity-50 uppercase tracking-wider shrink-0">BIOMECODE:</span>
+          <span className="opacity-80">{animData.biomecode}</span>
+        </div>
+      )}
+      {animData.zone && (
+        <div className="flex items-baseline gap-1.5">
+          <span className="opacity-50 uppercase tracking-wider shrink-0">ZONE:</span>
+          <span className="opacity-80">[{animData.zone.toUpperCase()}]</span>
+        </div>
+      )}
+      {animData.biome != null && (
+        <div className="flex items-baseline gap-1.5">
+          <span className="opacity-50 uppercase tracking-wider shrink-0">BIOME:</span>
+          <span className="opacity-80">{animData.biome},</span>
+        </div>
+      )}
+      {animData.seed != null && (
+        <div className="flex items-baseline gap-1.5">
+          <span className="opacity-50 uppercase tracking-wider shrink-0">SEED:</span>
+          <span className="opacity-80">{animData.seed},</span>
         </div>
       )}
       {animData.chroma && (
-        <MetaRow label="chroma" value={animData.chroma} />
+        <div className="flex items-baseline gap-1.5">
+          <span className="opacity-50 uppercase tracking-wider shrink-0">CHROMA:</span>
+          <span className="opacity-80">{animData.chroma}</span>
+        </div>
       )}
-    </div>
-  );
-}
-
-function MetaRow({ label, value }) {
-  return (
-    <div className="flex gap-3 items-baseline">
-      <span className="opacity-50 uppercase tracking-wider shrink-0" style={{ minWidth: '3.5rem' }}>
-        {label}
-      </span>
-      <span className="opacity-80">{value}</span>
     </div>
   );
 }

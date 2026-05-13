@@ -58,67 +58,69 @@ export default function MandalaControls({ params, onChange }) {
         </div>
       </Field>
 
-      <Slider
-        label="peak height"
-        value={params.peakHeight}
-        min={1}
-        max={9}
-        onChange={(peakHeight) => update({ peakHeight })}
-      />
-      <Slider
-        label="min height"
-        value={params.minHeight}
-        min={0}
-        max={Math.max(0, params.peakHeight - 1)}
-        onChange={(minHeight) => update({ minHeight })}
-      />
-
-      {isClassic && (
-        <>
-          <Slider
-            label="variance"
-            value={params.variance}
-            min={1}
-            max={4}
-            onChange={(variance) => update({ variance })}
-          />
-          <Slider
-            label="start value"
-            value={params.startValue}
-            min={params.minHeight}
-            max={params.peakHeight}
-            onChange={(startValue) => update({ startValue })}
-          />
-        </>
-      )}
-
-      {isRings && (
+      <div className="flex flex-col gap-2">
         <Slider
-          label="ring count"
-          value={params.ringCount}
-          min={2}
-          max={16}
-          onChange={(ringCount) => update({ ringCount })}
-        />
-      )}
-
-      {isTemple && (
-        <Slider
-          label="terrace count"
-          value={params.terraceCount}
-          min={2}
+          label="peak height"
+          value={params.peakHeight}
+          min={1}
           max={9}
-          onChange={(terraceCount) => update({ terraceCount })}
+          onChange={(peakHeight) => update({ peakHeight })}
         />
-      )}
+        <Slider
+          label="min height"
+          value={params.minHeight}
+          min={0}
+          max={Math.max(0, params.peakHeight - 1)}
+          onChange={(minHeight) => update({ minHeight })}
+        />
 
-      <Slider
-        label="smoothing"
-        value={params.smoothing}
-        min={0}
-        max={3}
-        onChange={(smoothing) => update({ smoothing })}
-      />
+        {isClassic && (
+          <>
+            <Slider
+              label="variance"
+              value={params.variance}
+              min={1}
+              max={4}
+              onChange={(variance) => update({ variance })}
+            />
+            <Slider
+              label="start value"
+              value={params.startValue}
+              min={params.minHeight}
+              max={params.peakHeight}
+              onChange={(startValue) => update({ startValue })}
+            />
+          </>
+        )}
+
+        {isRings && (
+          <Slider
+            label="ring count"
+            value={params.ringCount}
+            min={2}
+            max={16}
+            onChange={(ringCount) => update({ ringCount })}
+          />
+        )}
+
+        {isTemple && (
+          <Slider
+            label="terrace count"
+            value={params.terraceCount}
+            min={2}
+            max={9}
+            onChange={(terraceCount) => update({ terraceCount })}
+          />
+        )}
+
+        <Slider
+          label="smoothing"
+          value={params.smoothing}
+          min={0}
+          max={3}
+          onChange={(smoothing) => update({ smoothing })}
+        />
+      </div>
 
       {isClassic && (
         <Field label="rotational order">
@@ -154,9 +156,9 @@ export default function MandalaControls({ params, onChange }) {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, children, tight = false }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className={`flex flex-col ${tight ? 'gap-0' : 'gap-1'}`}>
       <span className="text-xs opacity-60 uppercase tracking-wider">{label}</span>
       {children}
     </div>
@@ -165,7 +167,7 @@ function Field({ label, children }) {
 
 function Slider({ label, value, min, max, onChange }) {
   return (
-    <Field label={`${label} — ${value}`}>
+    <Field label={`${label} — ${value}`} tight>
       <input
         type="range"
         min={min}
