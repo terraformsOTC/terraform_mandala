@@ -110,6 +110,6 @@ export function defaultParams() {
     minHeight: DEFAULTS.minHeight,
     ringCount: DEFAULTS.ringCount,
     terraceCount: DEFAULTS.terraceCount,
-    smoothing: DEFAULTS.smoothing,
+    smoothing: 0,
   };
 }

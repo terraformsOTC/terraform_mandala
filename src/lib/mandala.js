@@ -27,8 +27,7 @@ export const DEFAULTS = {
   startValue: 5,
   rotationalOrder: 4,
   minHeight: 0,
-  ringCount: 6,
-  smoothing: 0,
+  ringCount: 10,
   terraceCount: 5,
 };
 
@@ -40,9 +39,8 @@ export function generateMandala(opts = {}) {
   const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
   const variance = clampInt(opts.variance ?? DEFAULTS.variance, 1, 4);
   const startValue = clampInt(opts.startValue ?? DEFAULTS.startValue, minHeight, peakHeight);
-  const ringCount = clampInt(opts.ringCount ?? DEFAULTS.ringCount, 2, 16);
-  const terraceCount = clampInt(opts.terraceCount ?? DEFAULTS.terraceCount, 2, 9);
-  const smoothing = clampInt(opts.smoothing ?? DEFAULTS.smoothing, 0, 3);
+  const ringCount = clampInt(opts.ringCount ?? DEFAULTS.ringCount, 2, 20);
+  const terraceCount = clampInt(opts.terraceCount ?? DEFAULTS.terraceCount, 2, 12);
   const rotationalOrder = opts.rotationalOrder === 2 ? 2 : opts.rotationalOrder === 8 ? 8 : 4;
 
   const rng = makeRng(seed);
@@ -63,8 +61,6 @@ export function generateMandala(opts = {}) {
     }
     grid = expandToFullGrid(quadrant);
   }
-
-  if (smoothing > 0) grid = smoothGrid(grid, smoothing);
 
   const heightmap = grid.map((row) => row.join('')).join('');
 
@@ -497,11 +493,11 @@ function generateTemple(rng, terraceCount, minHeight, peakHeight) {
     }
   }
 
-  // ── 14. Central spire (3–5 stacked Gaussians) — applied last so center = peakHeight ──
-  const tierCount = 3 + Math.floor(rng() * 3);
+  // ── 14. Central spire — narrow, so it reads as a tight peak not a broad dome ──
+  const tierCount = 2 + Math.floor(rng() * 2);
   for (let tier = 0; tier < tierCount; tier++) {
-    const sigma = 3.8 - tier * 0.55;
-    const amp = Math.round(range * (0.10 + tier * 0.14 + rng() * 0.12));
+    const sigma = 1.6 - tier * 0.35;
+    const amp = Math.round(range * (0.08 + tier * 0.08 + rng() * 0.08));
     for (let i = 0; i < SIDE; i++) {
       for (let j = 0; j < SIDE; j++) {
         const d2 = (i - cx) ** 2 + (j - cx) ** 2;

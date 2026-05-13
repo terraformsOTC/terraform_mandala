@@ -98,7 +98,7 @@ export default function MandalaControls({ params, onChange }) {
             label="ring count"
             value={params.ringCount}
             min={2}
-            max={16}
+            max={20}
             onChange={(ringCount) => update({ ringCount })}
           />
         )}
@@ -108,18 +108,10 @@ export default function MandalaControls({ params, onChange }) {
             label="terrace count"
             value={params.terraceCount}
             min={2}
-            max={9}
+            max={12}
             onChange={(terraceCount) => update({ terraceCount })}
           />
         )}
-
-        <Slider
-          label="smoothing"
-          value={params.smoothing}
-          min={0}
-          max={3}
-          onChange={(smoothing) => update({ smoothing })}
-        />
       </div>
 
       {isClassic && (

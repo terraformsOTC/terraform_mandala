@@ -154,7 +154,6 @@ function HomeInner() {
     if (params.algorithm !== DEFAULTS.algorithm) next.set('algo', params.algorithm);
     if (params.ringCount !== DEFAULTS.ringCount) next.set('rings', String(params.ringCount));
     if (params.terraceCount !== DEFAULTS.terraceCount) next.set('terraces', String(params.terraceCount));
-    if (params.smoothing !== DEFAULTS.smoothing) next.set('smooth', String(params.smoothing));
     const qs = next.toString();
     const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
     window.history.replaceState(null, '', url);
@@ -245,8 +244,8 @@ function paramsFromUrl(searchParams) {
     startValue: num('start', 0, 9, DEFAULTS.startValue),
     rotationalOrder: searchParams.get('order') === '2' ? 2 : searchParams.get('order') === '8' ? 8 : 4,
     minHeight: num('min', 0, 9, DEFAULTS.minHeight),
-    ringCount: num('rings', 2, 16, DEFAULTS.ringCount),
-    terraceCount: num('terraces', 2, 9, DEFAULTS.terraceCount),
-    smoothing: num('smooth', 0, 3, DEFAULTS.smoothing),
+    ringCount: num('rings', 2, 20, DEFAULTS.ringCount),
+    terraceCount: num('terraces', 2, 12, DEFAULTS.terraceCount),
+    smoothing: 0,
   };
 }
