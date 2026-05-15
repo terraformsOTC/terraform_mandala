@@ -1,61 +1,64 @@
-// Encode the parcel preview animation as a GIF using gifenc.
-//
-// We render each frame on an offscreen canvas via canvasRenderer.renderFrame,
-// then feed the RGBA pixels through gifenc's quantize → applyPalette →
-// writeFrame pipeline. Palette is computed once on frame 0 and reused for
-// every subsequent frame: the animation only cycles existing palette colors,
-// so re-quantizing per frame would waste CPU and risk slight color drift.
+// Encode the parcel preview animation as a GIF via canvas re-render +
+// gifenc. See canvasRenderer.js for the animation model — this file is
+// just the driver.
 
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
-import { loadParcelFont, renderFrame } from './canvasRenderer.js';
+import { prepareRenderer, renderFrame } from './canvasRenderer.js';
 
 export const DEFAULT_GIF_OPTS = {
   width: 384,
   height: 560,
   fps: 12,
   durationSec: 5,
+  // Simulated "page time" at frame 0. Offset into the animation so the GIF
+  // captures all CSS-animated classes mid-cycle (their delays are 0/2/4/6 s
+  // for the typical Terraforms renderer; starting at 8 s places everyone
+  // past their delay and into a meaningful color phase).
+  startTimeMs: 8000,
 };
 
-// Yield to the event loop so the progress callback paints and we don't
-// freeze the tab on slow machines.
 function tick() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 export async function exportGif({ animData, heightmap, tokenId, options, onProgress }) {
   const opts = { ...DEFAULT_GIF_OPTS, ...(options || {}) };
-  const { width, height, fps, durationSec } = opts;
+  const { width, height, fps, durationSec, startTimeMs } = opts;
   const totalFrames = Math.max(2, Math.round(fps * durationSec));
   const delay = Math.round(1000 / fps);
 
-  const fontFamily = await loadParcelFont(animData?.html, tokenId);
+  const state = await prepareRenderer(animData?.html);
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
+  // Sample 4 evenly-spaced frames to build the palette. The CSS keyframes
+  // interpolate linearly between stops, so a single-frame palette would miss
+  // intermediate colors that appear later. Sampling across the loop captures
+  // the full spectrum of interpolated colors.
+  const sampleStride = Math.max(1, Math.floor(totalFrames / 4));
+  const sampleBufs = [];
+  for (let f = 0; f < totalFrames; f += sampleStride) {
+    const timeMs = startTimeMs + (f * 1000) / fps;
+    renderFrame(ctx, state, heightmap, timeMs, { width, height });
+    sampleBufs.push(new Uint8ClampedArray(ctx.getImageData(0, 0, width, height).data));
+  }
+  const combined = new Uint8ClampedArray(sampleBufs.reduce((s, b) => s + b.length, 0));
+  let off = 0;
+  for (const b of sampleBufs) { combined.set(b, off); off += b.length; }
+  const palette = quantize(combined, 256);
+
   const gif = GIFEncoder();
-  let palette = null;
 
   for (let f = 0; f < totalFrames; f++) {
-    renderFrame(ctx, {
-      animData,
-      heightmap,
-      frame: f,
-      totalFrames,
-      width,
-      height,
-      fontFamily,
-    });
+    const timeMs = startTimeMs + (f * 1000) / fps;
+    renderFrame(ctx, state, heightmap, timeMs, { width, height });
     const imgData = ctx.getImageData(0, 0, width, height);
-    if (palette == null) {
-      palette = quantize(imgData.data, 256);
-    }
     const indexed = applyPalette(imgData.data, palette);
     gif.writeFrame(indexed, width, height, { palette, delay });
     if (onProgress) onProgress((f + 1) / totalFrames);
-    // Yield every few frames so the UI stays responsive.
     if (f % 4 === 3) await tick();
   }
 
@@ -63,7 +66,6 @@ export async function exportGif({ animData, heightmap, tokenId, options, onProgr
   return new Blob([gif.bytes()], { type: 'image/gif' });
 }
 
-// Trigger a browser download of the blob.
 export function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
