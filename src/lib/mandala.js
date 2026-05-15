@@ -1,21 +1,23 @@
 import { makeRng } from './seedrandom.js';
 import { validate } from './heightmap.js';
 
-// Port of d3l33t's mandala-gen2.js. Generates a 32x32 symmetric heightmap.
+// 32x32 symmetric heightmap generator. All outputs are D2-symmetric (horizontal
+// + vertical mirror axes, 180° rotation) and validate() must pass before return.
 //
-// Pipeline:
-//  1. Walk the lower-right triangle (anti-diagonal) of a 16x16 quadrant with
-//     a seeded random walk: each cell is the previous cell ± variance, clamped
-//     to [0, peakHeight].
-//  2. Mirror across the anti-diagonal to fill the upper-left triangle of the
-//     quadrant. Result: a 16x16 quadrant symmetric about its anti-diagonal.
-//  3. (rotationalOrder=8 only) Symmetrize across the main diagonal too, by
-//     averaging q[i][j] and q[j][i]. Adds D4 octagonal symmetry.
-//  4. Mirror each quadrant row horizontally to produce 16 rows of 32 chars.
-//  5. Prepend the same 16 rows in reverse vertical order to produce 32x32.
+// Five generators are dispatched from generateMandala(opts):
+//   classic   — port of d3l33t's mandala-gen2.js (a seeded random walk on one
+//               quadrant, mirrored). rotationalOrder picks 2/4/8-fold variant.
+//   rings     — concentric Euclidean rings, per-ring height is a uniform draw.
+//   temple/cathedral — Greek-cross plan, central crossing spire, gabled arms
+//               with rib bays, pinnacle clusters, arm-tip turrets, flying
+//               buttresses, cloister + precinct walls.
+//   temple/wat — Quincunx 5-tower (Angkor) layout, nested Chebyshev galleries,
+//               naga balustrade rhythm, cardinal causeways, outer enclosure.
+//   temple/ziggurat — stacked Chebyshev tiers with multi-scale recessed niches,
+//               corner buttresses, cardinal staircases, top shrine, precinct.
 //
-// Output is a 1024-char digit string + 32x32 grid. Always passes
-// vertical/horizontal/180° symmetry checks; throws if not.
+// terraceCount drives complexity for the three temple variants. seed is the
+// RNG input via mulberry32+FNV-1a; identical seed → identical output.
 
 const QUADRANT = 16;
 const SIDE = 32;
@@ -29,7 +31,10 @@ export const DEFAULTS = {
   minHeight: 0,
   ringCount: 10,
   terraceCount: 5,
+  templeStyle: 'wat',
 };
+
+export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
 
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
@@ -42,6 +47,7 @@ export function generateMandala(opts = {}) {
   const ringCount = clampInt(opts.ringCount ?? DEFAULTS.ringCount, 2, 20);
   const terraceCount = clampInt(opts.terraceCount ?? DEFAULTS.terraceCount, 2, 12);
   const rotationalOrder = opts.rotationalOrder === 2 ? 2 : opts.rotationalOrder === 8 ? 8 : 4;
+  const templeStyle = TEMPLE_STYLES.includes(opts.templeStyle) ? opts.templeStyle : DEFAULTS.templeStyle;
 
   const rng = makeRng(seed);
 
@@ -49,7 +55,13 @@ export function generateMandala(opts = {}) {
   if (algorithm === 'rings') {
     grid = generateRings(rng, ringCount, minHeight, peakHeight);
   } else if (algorithm === 'temple') {
-    grid = generateTemple(rng, terraceCount, minHeight, peakHeight);
+    if (templeStyle === 'cathedral') {
+      grid = generateCathedral(rng, terraceCount, minHeight, peakHeight);
+    } else if (templeStyle === 'ziggurat') {
+      grid = generateZiggurat(rng, terraceCount, minHeight, peakHeight);
+    } else {
+      grid = generateWat(rng, terraceCount, minHeight, peakHeight);
+    }
   } else {
     let quadrant;
     if (rotationalOrder === 2) {
@@ -162,353 +174,30 @@ function generateRings(rng, ringCount, minHeight, peakHeight) {
   return grid;
 }
 
-// Temple generator: multi-scale fractal stepped pyramid. Layers of detail from
-// full-grid terraces down to single-pixel micro-steps, all 4-fold symmetric.
+// ───────────────────────────────────────────────────────────────────────────
+// Temple generators: three architectural sub-styles. Each produces a D2-
+// symmetric heightmap (horizontal + vertical mirror axes, 180° rotation).
 //
-// Pipeline:
-//  1. Blended Chebyshev+Euclidean distance with dual-frequency star shaping
-//  2. Variable-width terraces with seed-driven height drops
-//  3. Sub-terrace half-steps inside every terrace band
-//  4. Angular modulation rings at 3–5 radial bands × 2–3 frequencies
-//  5. Dense ridge walls on every terrace boundary
-//  6. Multi-octave trig noise (3 harmonics, edge-weighted so center stays clean)
-//  7. Radial spoke ridges (4/8/12-fold)
-//  8. Multiple moat rings
-//  9. Recursive tower clusters: 1–3 levels, each with 4 mini-towers
-// 10. Dense stupa rings on every intermediate terrace
-// 11. Satellite spire clusters at 2–3 radii
-// 12. Crenellations on multiple terrace edges
-// 13. Cardinal + diagonal gateway channels
-// 14. Central 3–5-tier Gaussian spire (guarantees center = peakHeight)
-// 15. Final 4-fold symmetry averaging pass
-function generateTemple(rng, terraceCount, minHeight, peakHeight) {
-  const cx = (SIDE - 1) / 2; // 15.5
-  const range = peakHeight - minHeight;
-  const maxRadius = cx + 0.5; // 16
+//  - generateCathedral: Greek-cross plan, central crossing spire, gabled
+//    arms with rib bays, pinnacle clusters at the crossing, arm-tip turrets,
+//    diagonal flying buttresses, cloister wall.
+//
+//  - generateWat: quincunx 5-tower layout (central sikhara + 4 corner
+//    sikharas), nested Chebyshev galleries with naga balustrade rhythm,
+//    cardinal causeway depressions, mini-stupa ring.
+//
+//  - generateZiggurat: stacked Chebyshev tiers with recessed-niche fluting on
+//    every tier face (multi-scale), corner buttresses on each tier, cardinal
+//    staircase channels, small top temple. Strongly orthogonal silhouette.
+//
+// Design rules followed throughout:
+//  • Every "surface" gets multi-scale relief — no large constant-height patches.
+//  • Features are placed at all 4 mirror positions so the final D2 averaging
+//    pass doesn't blur them.
+//  • terraceCount is the primary complexity dial (matches existing UI knob).
+// ───────────────────────────────────────────────────────────────────────────
 
-  // ── 1. Dual-frequency distance metric ──
-  const octMix = rng() * 0.70;
-  const starAmp = (rng() > 0.5 ? 1 : -1) * (0.06 + rng() * 0.22);
-  const star2Amp = (rng() > 0.5 ? 1 : -1) * (0.03 + rng() * 0.12);
-
-  function effDist(i, j) {
-    const di = i - cx, dj = j - cx;
-    const cheby = Math.max(Math.abs(di), Math.abs(dj));
-    const eucl = Math.hypot(di, dj);
-    const angle = Math.atan2(di, dj);
-    const d = cheby * (1 - octMix) + eucl * octMix;
-    const mod = 1 + starAmp * Math.cos(4 * angle) + star2Amp * Math.cos(8 * angle);
-    return d / Math.max(0.3, mod);
-  }
-
-  // ── 2. Terrace layout ──
-  const weights = Array.from({ length: terraceCount }, () => 0.35 + rng() * 1.3);
-  const totalW = weights.reduce((a, b) => a + b, 0);
-  const radii = [];
-  let acc = 0;
-  for (let t = 0; t < terraceCount; t++) {
-    acc += weights[t];
-    radii.push((acc / totalW) * maxRadius);
-  }
-
-  const terraceHeights = [];
-  let h = peakHeight;
-  for (let t = 0; t < terraceCount; t++) {
-    terraceHeights.push(h);
-    if (t < terraceCount - 1) {
-      const remaining = terraceCount - t - 1;
-      const drop = Math.max(1, Math.round(((h - minHeight) / (remaining + 1)) * (0.5 + rng() * 1.0)));
-      h = Math.max(minHeight, h - drop);
-    }
-  }
-
-  const raw = Array.from({ length: SIDE }, (_, i) =>
-    Array.from({ length: SIDE }, (_, j) => {
-      const d = effDist(i, j);
-      let t = 0;
-      while (t < terraceCount - 1 && d > radii[t]) t++;
-      return terraceHeights[t];
-    })
-  );
-
-  // ── 3. Sub-terrace half-steps: a +1 band in the inner half of every terrace ──
-  for (let t = 0; t < terraceCount - 1; t++) {
-    const innerR = t > 0 ? radii[t - 1] : 0;
-    const outerR = radii[t];
-    const midR = innerR + (outerR - innerR) * (0.3 + rng() * 0.4);
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        const d = effDist(i, j);
-        if (d >= innerR && d < midR) {
-          raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
-        }
-      }
-    }
-  }
-
-  // ── 4. Angular modulation bands: sinusoidal ripples at multiple scales ──
-  // Frequencies must be multiples of 4 to preserve 4-fold symmetry.
-  const angFreqs = [4, 8, 12, 16, 20];
-  const angLayerCount = 3 + Math.floor(rng() * 3);
-  for (let layer = 0; layer < angLayerCount; layer++) {
-    const freq = angFreqs[Math.floor(rng() * angFreqs.length)];
-    const innerR = rng() * maxRadius * 0.25;
-    const outerR = innerR + maxRadius * (0.12 + rng() * 0.55);
-    const amp = range >= 3 ? (1 + Math.floor(rng() * 2)) : 1;
-    const phase = Math.floor(rng() * 4) * (Math.PI / 2); // 0/90/180/270 keeps 4-fold
-    const fadeDist = Math.max(0.5, (outerR - innerR) * 0.18);
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        const d = Math.hypot(i - cx, j - cx);
-        if (d < innerR || d > outerR) continue;
-        const angle = Math.atan2(i - cx, j - cx);
-        const wave = (Math.cos(freq * angle + phase) + 1) * 0.5;
-        const fadeIn = Math.min(1, (d - innerR) / fadeDist);
-        const fadeOut = Math.min(1, (outerR - d) / fadeDist);
-        raw[i][j] = Math.min(peakHeight, Math.max(minHeight,
-          raw[i][j] + Math.round(amp * wave * Math.min(fadeIn, fadeOut))
-        ));
-      }
-    }
-  }
-
-  // ── 5. Ridge walls on every terrace boundary ──
-  const ridgeBoost = 1 + Math.floor(rng() * 2);
-  const ridgeBand = 0.55 + rng() * 0.4;
-  for (let i = 0; i < SIDE; i++) {
-    for (let j = 0; j < SIDE; j++) {
-      const d = effDist(i, j);
-      for (let t = 0; t < terraceCount - 1; t++) {
-        if (Math.abs(d - radii[t]) < ridgeBand) {
-          raw[i][j] = Math.min(peakHeight, raw[i][j] + ridgeBoost);
-          break;
-        }
-      }
-    }
-  }
-
-  // ── 6. Multi-octave trig noise (3 harmonics, edge-weighted) ──
-  // Generated in first quadrant and mirrored for exact symmetry.
-  if (range >= 2) {
-    const nScale = 0.28 + rng() * 0.45;
-    const nAmp = 1 + Math.floor(rng() * 2);
-    const phX = rng() * 80, phY = rng() * 80;
-    for (let i = 0; i <= 15; i++) {
-      for (let j = 0; j <= 15; j++) {
-        const n = (
-          Math.sin((i + phX) * nScale) * Math.cos((j + phY) * nScale) +
-          Math.sin((i + phX) * nScale * 2.17) * Math.cos((j + phY) * nScale * 2.17) * 0.5 +
-          Math.sin((i + phX) * nScale * 4.31) * Math.cos((j + phY) * nScale * 4.31) * 0.25
-        ) / 1.75;
-        const d = Math.hypot(i - cx, j - cx);
-        const edgeW = Math.min(1, d / (maxRadius * 0.3)); // zero at center, full at edge
-        const val = Math.round(nAmp * n * edgeW);
-        for (const [ii, jj] of [[i, j], [31 - i, j], [i, 31 - j], [31 - i, 31 - j]]) {
-          raw[ii][jj] = Math.min(peakHeight, Math.max(minHeight, raw[ii][jj] + val));
-        }
-      }
-    }
-  }
-
-  // ── 7. Radial spoke ridges ──
-  if (rng() > 0.25) {
-    const spokeCount = 4 * (1 + Math.floor(rng() * 3));
-    const spokeWidth = 0.25 + rng() * 0.55;
-    const spokeBoost = 1 + Math.floor(rng() * 2);
-    const innerProtect = 2.5;
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        const di = i - cx, dj = j - cx;
-        const d = Math.hypot(di, dj);
-        if (d < innerProtect) continue;
-        const angle = Math.atan2(di, dj);
-        let near = false;
-        for (let s = 0; s < spokeCount; s++) {
-          const sa = (s / spokeCount) * Math.PI * 2;
-          let diff = Math.abs(angle - sa);
-          if (diff > Math.PI) diff = Math.PI * 2 - diff;
-          if (diff * d < spokeWidth) { near = true; break; }
-        }
-        if (near) raw[i][j] = Math.min(peakHeight, raw[i][j] + spokeBoost);
-      }
-    }
-  }
-
-  // ── 8. Multiple moat rings ──
-  const moatCount = 1 + Math.floor(rng() * 3);
-  for (let m = 0; m < moatCount; m++) {
-    if (range < 2) break;
-    const moatR = maxRadius * (0.25 + m * 0.22 + rng() * 0.12);
-    const moatSig = 0.5 + rng() * 1.0;
-    const moatDepth = 1 + Math.floor(rng() * 2);
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        const dist = Math.hypot(i - cx, j - cx) - moatR;
-        raw[i][j] = Math.max(minHeight,
-          raw[i][j] - Math.round(moatDepth * Math.exp(-(dist ** 2) / (2 * moatSig ** 2)))
-        );
-      }
-    }
-  }
-
-  // ── 9. Recursive tower clusters: 1–3 levels, each with 4 mini-towers ──
-  const towerLevels = 1 + Math.floor(rng() * Math.min(3, terraceCount - 1));
-  for (let level = 0; level < towerLevels; level++) {
-    const tR = radii[level] * (0.65 + rng() * 0.3);
-    const dDiag = tR / Math.sqrt(2);
-    const tSig = 0.55 + rng() * 1.1;
-    const tAmp = range * (0.12 + rng() * 0.35);
-    const eightFold = rng() > 0.35;
-    const tPos = [
-      [cx - dDiag, cx - dDiag], [cx - dDiag, cx + dDiag],
-      [cx + dDiag, cx - dDiag], [cx + dDiag, cx + dDiag],
-    ];
-    if (eightFold) tPos.push(
-      [cx, cx - tR], [cx, cx + tR], [cx - tR, cx], [cx + tR, cx]
-    );
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        let bump = 0;
-        for (const [ri, ci] of tPos) {
-          bump += tAmp * Math.exp(-((i - ri) ** 2 + (j - ci) ** 2) / (2 * tSig ** 2));
-        }
-        raw[i][j] = Math.min(peakHeight, raw[i][j] + Math.round(bump));
-      }
-    }
-    // Mini-towers orbiting each main tower
-    if (rng() > 0.3) {
-      const mR = tSig * 1.8;
-      const mSig = 0.35 + rng() * 0.55;
-      const mAmp = tAmp * 0.45;
-      for (const [ri, ci] of tPos) {
-        const mPos = [
-          [ri - mR * 0.7, ci - mR * 0.7], [ri - mR * 0.7, ci + mR * 0.7],
-          [ri + mR * 0.7, ci - mR * 0.7], [ri + mR * 0.7, ci + mR * 0.7],
-        ];
-        for (let i = 0; i < SIDE; i++) {
-          for (let j = 0; j < SIDE; j++) {
-            let bump = 0;
-            for (const [mri, mci] of mPos) {
-              bump += mAmp * Math.exp(-((i - mri) ** 2 + (j - mci) ** 2) / (2 * mSig ** 2));
-            }
-            raw[i][j] = Math.min(peakHeight, raw[i][j] + Math.round(bump));
-          }
-        }
-      }
-    }
-  }
-
-  // ── 10. Stupa rings on every intermediate terrace ──
-  for (let t = 1; t < terraceCount; t++) {
-    if (rng() > 0.55) continue;
-    const sR = t < terraceCount - 1 ? (radii[t - 1] + radii[t]) / 2 : radii[t - 1] * 1.1;
-    if (sR < 1.5) continue;
-    const sSig = 0.4 + rng() * 0.85;
-    const sAmp = range * (0.1 + rng() * 0.22);
-    const eightFold = rng() > 0.4;
-    const dDiag = sR / Math.sqrt(2);
-    const sPos = [
-      [cx - dDiag, cx - dDiag], [cx - dDiag, cx + dDiag],
-      [cx + dDiag, cx - dDiag], [cx + dDiag, cx + dDiag],
-    ];
-    if (eightFold) sPos.push(
-      [cx, cx - sR], [cx, cx + sR], [cx - sR, cx], [cx + sR, cx]
-    );
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        let bump = 0;
-        for (const [ri, ci] of sPos) {
-          bump += sAmp * Math.exp(-((i - ri) ** 2 + (j - ci) ** 2) / (2 * sSig ** 2));
-        }
-        raw[i][j] = Math.min(peakHeight, raw[i][j] + Math.round(bump));
-      }
-    }
-  }
-
-  // ── 11. Satellite spire clusters at 2–3 radii ──
-  const satLayers = 2 + Math.floor(rng() * 2);
-  for (let sl = 0; sl < satLayers && sl < terraceCount - 1; sl++) {
-    const satR = radii[sl] * (0.35 + rng() * 0.55);
-    const satSig = 0.55 + rng() * 1.0;
-    const satAmp = range * (0.14 + rng() * 0.28);
-    const dDiag = satR / Math.sqrt(2);
-    const satPos = [
-      [cx - dDiag, cx - dDiag], [cx - dDiag, cx + dDiag],
-      [cx + dDiag, cx - dDiag], [cx + dDiag, cx + dDiag],
-    ];
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        let bump = 0;
-        for (const [ri, ci] of satPos) {
-          bump += satAmp * Math.exp(-((i - ri) ** 2 + (j - ci) ** 2) / (2 * satSig ** 2));
-        }
-        raw[i][j] = Math.min(peakHeight, raw[i][j] + Math.round(bump));
-      }
-    }
-  }
-
-  // ── 12. Crenellations on multiple terrace edges ──
-  const crenCount = Math.floor(rng() * Math.min(3, terraceCount - 1));
-  for (let c = 0; c < crenCount; c++) {
-    const crenT = 1 + Math.floor(rng() * Math.max(1, terraceCount - 2));
-    const crenBand = 0.4 + rng() * 0.45;
-    const crenStep = 1 + Math.floor(rng() * 2);
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        if (Math.abs(effDist(i, j) - radii[crenT]) < crenBand && (i + j) % 2 === 0) {
-          raw[i][j] = Math.min(peakHeight, raw[i][j] + crenStep);
-        }
-      }
-    }
-  }
-
-  // ── 13. Gateway channels (cardinal + diagonal) ──
-  if (rng() > 0.2) {
-    const nDepth = 1 + Math.floor(rng() * 2);
-    const nWidth = 0.4 + rng() * 0.8;
-    const innerP = 3 + Math.floor(rng() * 3);
-    const outerL = radii[terraceCount - 1] - 0.3;
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        const dx = Math.abs(j - cx), dy = Math.abs(i - cx);
-        if ((dx < nWidth || dy < nWidth) && Math.max(dx, dy) > innerP && Math.max(dx, dy) < outerL) {
-          raw[i][j] = Math.max(minHeight, raw[i][j] - nDepth);
-        }
-      }
-    }
-  }
-  if (rng() > 0.3) {
-    const dDepth = 1 + Math.floor(rng() * 2);
-    const dWidth = 0.35 + rng() * 0.6;
-    const innerP = 3;
-    const outerL = radii[terraceCount - 1] * 0.9;
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        const di = Math.abs(i - cx), dj = Math.abs(j - cx);
-        const d = Math.hypot(i - cx, j - cx);
-        if (Math.abs(di - dj) < dWidth && d > innerP && d < outerL) {
-          raw[i][j] = Math.max(minHeight, raw[i][j] - dDepth);
-        }
-      }
-    }
-  }
-
-  // ── 14. Central spire — narrow, so it reads as a tight peak not a broad dome ──
-  const tierCount = 2 + Math.floor(rng() * 2);
-  for (let tier = 0; tier < tierCount; tier++) {
-    const sigma = 1.6 - tier * 0.35;
-    const amp = Math.round(range * (0.08 + tier * 0.08 + rng() * 0.08));
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        const d2 = (i - cx) ** 2 + (j - cx) ** 2;
-        raw[i][j] = Math.min(peakHeight,
-          raw[i][j] + Math.round(amp * Math.exp(-d2 / (2 * sigma ** 2)))
-        );
-      }
-    }
-  }
-
-  // ── 15. Enforce exact 4-fold symmetry ──
+function enforceD2(raw, minHeight, peakHeight) {
   for (let i = 0; i <= 15; i++) {
     for (let j = 0; j <= 15; j++) {
       const i2 = 31 - i, j2 = 31 - j;
@@ -518,30 +207,525 @@ function generateTemple(rng, terraceCount, minHeight, peakHeight) {
       raw[i][j] = raw[i2][j] = raw[i][j2] = raw[i2][j2] = v;
     }
   }
+}
+
+// Add a Gaussian bump at each [row, col] position to every cell of `raw`,
+// clipped to peakHeight. Caller is responsible for placing positions in
+// D2-symmetric configurations (the final enforceD2 pass will average otherwise).
+function placeGaussiansAt(raw, positions, amp, sigma, peakHeight) {
+  const twoSig2 = 2 * sigma * sigma;
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      let bump = 0;
+      for (const [ri, ci] of positions) {
+        bump += amp * Math.exp(-((i - ri) ** 2 + (j - ci) ** 2) / twoSig2);
+      }
+      raw[i][j] = Math.min(peakHeight, raw[i][j] + Math.round(bump));
+    }
+  }
+}
+
+function generateCathedral(rng, terraceCount, minHeight, peakHeight) {
+  const cx = (SIDE - 1) / 2;
+  const range = peakHeight - minHeight;
+  const raw = Array.from({ length: SIDE }, () => new Array(SIDE).fill(minHeight));
+
+  // Greek-cross arm half-width grows with terraceCount (2-12 → ~2.3-5.5).
+  const armW = 2.0 + (terraceCount - 2) * 0.32 + rng() * 0.5;
+  // Push the precinct closer to the parcel edge so corner zones are full.
+  const precinctR = 14.0 + rng() * 0.8;
+  const cloisterOuter = 11.5 + rng() * 1.5;
+  const naveBase = minHeight + Math.max(1, Math.round(range * 0.22));
+  const courtBase = minHeight + Math.max(1, Math.round(range * 0.10));
+  const groundBase = minHeight + (range >= 4 ? 1 : 0);
+
+  // ── 1. Lift the entire interior above min-ground so corners aren't barren ──
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+      if (cheb < precinctR) raw[i][j] = groundBase;
+    }
+  }
+
+  // ── 2. Cloister courtyard in the diagonal corner regions ──
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+      if (di > armW && dj > armW && Math.max(di, dj) < cloisterOuter) {
+        raw[i][j] = Math.max(raw[i][j], courtBase);
+      }
+    }
+  }
+
+  // ── 3. Greek-cross floor plan ──
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+      if ((di < armW || dj < armW) && Math.max(di, dj) < 15.0) {
+        raw[i][j] = Math.max(raw[i][j], naveBase);
+      }
+    }
+  }
+
+  // ── 4. Gable roof ridges along each arm ──
+  const ridgePeak = naveBase + Math.max(2, Math.round(range * 0.40));
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+      if (Math.max(di, dj) >= 15.0) continue;
+      if (dj < armW && di < 14) {
+        const r = 1 - (dj / armW) * 0.85;
+        raw[i][j] = Math.max(raw[i][j], naveBase + Math.round((ridgePeak - naveBase) * r));
+      }
+      if (di < armW && dj < 14) {
+        const r = 1 - (di / armW) * 0.85;
+        raw[i][j] = Math.max(raw[i][j], naveBase + Math.round((ridgePeak - naveBase) * r));
+      }
+    }
+  }
+
+  // ── 5. Bay ribs across each arm — alternating +1 along arm length ──
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+      if (dj < armW && di > armW * 0.6 && di < 14) {
+        if (Math.floor(di) % 2 === 0) raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
+      }
+      if (di < armW && dj > armW * 0.6 && dj < 14) {
+        if (Math.floor(dj) % 2 === 0) raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
+      }
+    }
+  }
+
+  // ── 6. Central crossing spire — multi-tier Gaussian, sharp ──
+  const spireTiers = 3 + Math.floor(rng() * 2);
+  for (let t = 0; t < spireTiers; t++) {
+    const sigma = 2.3 - t * 0.5;
+    const amp = Math.round(range * (0.16 + t * 0.10 + rng() * 0.04));
+    placeGaussiansAt(raw, [[cx, cx]], amp, sigma, peakHeight);
+  }
+
+  // ── 7. Arm-tip turrets ──
+  const tipDist = 12.5 + rng() * 1.5;
+  const tipSig = 0.85 + rng() * 0.25;
+  const tipAmp = range * (0.26 + rng() * 0.15);
+  placeGaussiansAt(raw, [
+    [cx - tipDist, cx], [cx + tipDist, cx],
+    [cx, cx - tipDist], [cx, cx + tipDist],
+  ], tipAmp, tipSig, peakHeight);
+
+  // ── 8. Pinnacle clusters at the inner corners of the crossing ──
+  const pinDist = armW + 1.7 + rng() * 0.4;
+  const pinSig = 0.55 + rng() * 0.25;
+  const pinAmp = range * (0.20 + rng() * 0.15);
+  placeGaussiansAt(raw, [
+    [cx - pinDist, cx - pinDist], [cx - pinDist, cx + pinDist],
+    [cx + pinDist, cx - pinDist], [cx + pinDist, cx + pinDist],
+  ], pinAmp, pinSig, peakHeight);
+
+  // ── 9. Side-chapel cross-protrusions (only when terraceCount allows) ──
+  if (terraceCount >= 4) {
+    const sOff = 4.5 + Math.floor(rng() * 4);
+    const sExt = armW + 1.2;
+    placeGaussiansAt(raw, [
+      [cx - sOff, cx - sExt], [cx - sOff, cx + sExt],
+      [cx + sOff, cx - sExt], [cx + sOff, cx + sExt],
+      [cx - sExt, cx - sOff], [cx + sExt, cx - sOff],
+      [cx - sExt, cx + sOff], [cx + sExt, cx + sOff],
+    ], range * (0.13 + rng() * 0.10), 0.6, peakHeight);
+  }
+
+  // ── 10. Corner chapel houses — fill the diagonal courtyard with small buildings ──
+  // Four square chapels in the deep corners, each with a low pyramidal roof.
+  const chapelR = cloisterOuter * 0.65 + rng() * 0.8;
+  const chapelHalf = 1.5 + rng() * 0.6;
+  const chapelH = courtBase + 1 + Math.floor(rng() * 2);
+  const chapelCenters = [
+    [cx - chapelR, cx - chapelR], [cx - chapelR, cx + chapelR],
+    [cx + chapelR, cx - chapelR], [cx + chapelR, cx + chapelR],
+  ];
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      for (const [cr, cc] of chapelCenters) {
+        const dr = Math.abs(i - cr), dc = Math.abs(j - cc);
+        if (dr < chapelHalf && dc < chapelHalf) {
+          const peak = chapelH + 1;
+          const r = 1 - Math.max(dr, dc) / chapelHalf;
+          raw[i][j] = Math.max(raw[i][j], chapelH + Math.round((peak - chapelH) * r));
+        }
+      }
+    }
+  }
+
+  // ── 11. Flying buttress ribs in the diagonal courtyard zones ──
+  const buttressBoost = 1 + Math.floor(rng() * 2);
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+      if (di < armW + 0.5 || dj < armW + 0.5) continue;
+      if (Math.max(di, dj) > cloisterOuter - 0.5) continue;
+      const diff = Math.abs(di - dj);
+      if (diff < 0.45 || (diff > 2.4 && diff < 3.05)) {
+        raw[i][j] = Math.min(peakHeight, raw[i][j] + buttressBoost);
+      }
+    }
+  }
+
+  // ── 12. Cloister outer wall ridge ──
+  if (range >= 3) {
+    const wallH = courtBase + 1 + Math.floor(rng() * 2);
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+        if (di < armW || dj < armW) continue;
+        const cheb = Math.max(di, dj);
+        if (Math.abs(cheb - (cloisterOuter - 0.5)) < 0.55) {
+          raw[i][j] = Math.max(raw[i][j], wallH);
+        }
+      }
+    }
+  }
+
+  // ── 13. Precinct perimeter wall (outer boundary of the cathedral grounds) ──
+  if (range >= 3) {
+    const periH = groundBase + 1;
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+        if (Math.abs(cheb - precinctR) < 0.55) {
+          raw[i][j] = Math.max(raw[i][j], periH);
+        }
+      }
+    }
+  }
+
+  // ── 14. Final D2 averaging pass ──
+  enforceD2(raw, minHeight, peakHeight);
 
   return raw.map((row) => row.map(String));
 }
 
-// 4-neighbour box blur, applied N times. Preserves all three symmetries
-// because averaging respects symmetric boundary conditions: if the input is
-// symmetric across an axis, neighbour sums at mirrored cells are equal too.
-function smoothGrid(grid, iterations) {
-  let cur = grid.map((row) => row.map(Number));
-  for (let n = 0; n < iterations; n++) {
-    const next = Array.from({ length: SIDE }, () => new Array(SIDE));
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        let sum = cur[i][j];
-        let count = 1;
-        if (i > 0) { sum += cur[i - 1][j]; count++; }
-        if (i < SIDE - 1) { sum += cur[i + 1][j]; count++; }
-        if (j > 0) { sum += cur[i][j - 1]; count++; }
-        if (j < SIDE - 1) { sum += cur[i][j + 1]; count++; }
-        next[i][j] = Math.round(sum / count);
+function generateWat(rng, terraceCount, minHeight, peakHeight) {
+  const cx = (SIDE - 1) / 2;
+  const range = peakHeight - minHeight;
+  const raw = Array.from({ length: SIDE }, () => new Array(SIDE).fill(minHeight));
+
+  const galleryCount = terraceCount;
+  // Outermost gallery starts at min+1 (not 0) so the outer band still has architecture.
+  const galleryRamp = 0.45 + rng() * 0.20;
+  // Seed picks corner-tower placement: closer-in vs further-out.
+  const cornerR = 5.0 + (terraceCount - 4) * 0.25 + rng() * 1.2;
+
+  // ── 1. Nested Chebyshev galleries; height ramps inward toward center ──
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+      const frac = cheb / 15.5;
+      const idx = Math.min(galleryCount - 1, Math.floor(frac * galleryCount));
+      const inward = (galleryCount - 1 - idx) / Math.max(1, galleryCount - 1);
+      raw[i][j] = minHeight + 1 + Math.round(inward * range * galleryRamp);
+    }
+  }
+
+  // ── 1b. Courtyard tile relief — checkerboard +1 breaks up flat gallery floors ──
+  // Phase varies by seed so the tile pattern doesn't always align identically.
+  const tilePhase = Math.floor(rng() * 2);
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+      // Don't relief the immediate center (would break the central tower base).
+      if (Math.max(di, dj) < 1.0) continue;
+      if ((Math.floor(di) + Math.floor(dj) + tilePhase) % 2 === 0) {
+        raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
       }
     }
-    cur = next;
   }
-  return cur.map((row) => row.map(String));
+
+  // ── 2. Gallery wall ridges at each gallery boundary ──
+  const wallBoost = 1 + (rng() > 0.65 ? 1 : 0);
+  for (let g = 1; g < galleryCount; g++) {
+    const wallCheb = 15.5 * (g / galleryCount);
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+        if (Math.abs(cheb - wallCheb) < 0.55) {
+          raw[i][j] = Math.min(peakHeight, raw[i][j] + wallBoost);
+        }
+      }
+    }
+  }
+
+  // ── 3. Naga balustrade — rhythmic +1 every 2 cells along each gallery wall ──
+  // Seed-driven phase shift makes each seed's naga rhythm different.
+  for (let g = 1; g < galleryCount; g++) {
+    const wallCheb = 15.5 * (g / galleryCount);
+    const phase = Math.floor(rng() * 2);
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+        const cheb = Math.max(di, dj);
+        if (Math.abs(cheb - wallCheb) >= 1.0) continue;
+        const running = di > dj ? dj : di;
+        if ((Math.floor(running) + phase) % 2 === 0) {
+          raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
+        }
+      }
+    }
+  }
+
+  // ── 4. Quincunx sikharas: central + 4 corner towers ──
+  // Central tower is the tallest. Corner towers boosted so they read clearly
+  // against the gallery base. Each tower is a multi-tier corbeled stack.
+  const cornerScale = 0.78 + rng() * 0.12;
+  const placeTower = (tr, tc, scale, sharpness) => {
+    const ttiers = 4 + Math.floor(rng() * 3);
+    for (let t = 0; t < ttiers; t++) {
+      const sigma = (2.4 - t * 0.42) * scale * sharpness;
+      const amp = Math.round(range * scale * (0.13 + t * 0.09));
+      placeGaussiansAt(raw, [[tr, tc]], amp, sigma, peakHeight);
+    }
+  };
+  placeTower(cx, cx, 1.0, 1.0);
+  placeTower(cx - cornerR, cx - cornerR, cornerScale, 0.95);
+  placeTower(cx - cornerR, cx + cornerR, cornerScale, 0.95);
+  placeTower(cx + cornerR, cx - cornerR, cornerScale, 0.95);
+  placeTower(cx + cornerR, cx + cornerR, cornerScale, 0.95);
+
+  // ── 5. Cardinal mini-prangs (4 small towers between the corner towers) ──
+  // Sits on the cardinal axes at roughly cornerR — creates an 8-spire cross-quincunx
+  // when present. Seed gate so not every wat has them.
+  if (rng() > 0.35) {
+    const cardR = cornerR * (0.85 + rng() * 0.25);
+    const cardSig = 0.55 + rng() * 0.2;
+    const cardAmp = range * (0.18 + rng() * 0.12);
+    placeGaussiansAt(raw, [
+      [cx - cardR, cx], [cx + cardR, cx], [cx, cx - cardR], [cx, cx + cardR],
+    ], cardAmp, cardSig, peakHeight);
+  }
+
+  // ── 6. Mini-stupa ring just inside the innermost gallery ──
+  if (galleryCount >= 3) {
+    const stupaR = 15.5 * (1 / galleryCount) * (1.3 + rng() * 0.5);
+    const diag = stupaR * 0.707;
+    placeGaussiansAt(raw, [
+      [cx - stupaR, cx], [cx + stupaR, cx],
+      [cx, cx - stupaR], [cx, cx + stupaR],
+      [cx - diag, cx - diag], [cx - diag, cx + diag],
+      [cx + diag, cx - diag], [cx + diag, cx + diag],
+    ], range * (0.09 + rng() * 0.06), 0.4, peakHeight);
+  }
+
+  // ── 7. Cardinal causeway depressions (4 channels into the heart) ──
+  const cwDepth = 1;
+  const cwWidth = 0.5 + rng() * 0.3;
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+      if (dj < cwWidth && di > 2 && di < 14) {
+        raw[i][j] = Math.max(minHeight, raw[i][j] - cwDepth);
+      }
+      if (di < cwWidth && dj > 2 && dj < 14) {
+        raw[i][j] = Math.max(minHeight, raw[i][j] - cwDepth);
+      }
+    }
+  }
+
+  // ── 8. Diagonal causeways to corner towers (subtle uplift ridge) ──
+  if (rng() > 0.35) {
+    const diagBoost = 1;
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+        if (Math.abs(di - dj) < 0.5 && di > 1.5 && di < cornerR - 0.5) {
+          raw[i][j] = Math.min(peakHeight, raw[i][j] + diagBoost);
+        }
+      }
+    }
+  }
+
+  // ── 9. Outer enclosure wall (the famous Angkor Wat outer perimeter) ──
+  if (range >= 3) {
+    const encloseR = 14.0;
+    const encH = minHeight + 1 + Math.floor(rng() * 2);
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+        if (Math.abs(cheb - encloseR) < 0.55) {
+          raw[i][j] = Math.max(raw[i][j], encH);
+        }
+      }
+    }
+  }
+
+  // ── 10. Final D2 averaging pass ──
+  enforceD2(raw, minHeight, peakHeight);
+
+  return raw.map((row) => row.map(String));
 }
+
+function generateZiggurat(rng, terraceCount, minHeight, peakHeight) {
+  const cx = (SIDE - 1) / 2;
+  const range = peakHeight - minHeight;
+  const raw = Array.from({ length: SIDE }, () => new Array(SIDE).fill(minHeight));
+
+  const tiers = terraceCount;
+  // Seed-driven base/top dimensions and tier shrink curve.
+  const baseHalfW = 13.8 + rng() * 1.0;
+  const minHalfW = 1.4 + rng() * 0.9;
+  // Power < 1 → tiers shrink faster at the bottom (broad base, pointy top).
+  // Power > 1 → tiers stay wide longer (squat). Seed picks one of three feels.
+  const shrinkPow = 0.65 + rng() * 0.75;
+
+  const tierWidths = [];
+  const tierHeights = [];
+  for (let k = 0; k < tiers; k++) {
+    const fraction = tiers === 1 ? 0 : k / (tiers - 1);
+    const shrunk = Math.pow(fraction, shrinkPow);
+    tierWidths.push(baseHalfW - (baseHalfW - minHalfW) * shrunk);
+    tierHeights.push(minHeight + Math.round(((k + 1) / tiers) * range * 0.9));
+  }
+
+  // ── 1. Stack tier squares; later (smaller, taller) tiers override earlier ──
+  for (let k = 0; k < tiers; k++) {
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+        if (cheb < tierWidths[k]) raw[i][j] = Math.max(raw[i][j], tierHeights[k]);
+      }
+    }
+  }
+
+  // ── 2. Wall-edge cornice ridge on each tier rim ──
+  const corniceBoost = 1 + (rng() > 0.7 ? 1 : 0);
+  for (let k = 0; k < tiers; k++) {
+    const wallCheb = tierWidths[k];
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+        if (Math.abs(cheb - wallCheb) < 0.55) {
+          raw[i][j] = Math.min(peakHeight, raw[i][j] + corniceBoost);
+        }
+      }
+    }
+  }
+
+  // ── 3. Recessed niche fluting — the defining ziggurat feature ──
+  // Seed picks niche period (2 or 3 cells) and phase per tier.
+  const nichePeriod = rng() > 0.55 ? 2 : 3;
+  const nicheDeep = 1 + (rng() > 0.65 ? 1 : 0);
+  for (let k = 0; k < tiers; k++) {
+    const outerHalfW = tierWidths[k];
+    const innerHalfW = k < tiers - 1 ? tierWidths[k + 1] : 0;
+    if (outerHalfW - innerHalfW < 0.5) continue;
+    const phase = Math.floor(rng() * nichePeriod);
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+        const cheb = Math.max(di, dj);
+        if (cheb >= outerHalfW || cheb < innerHalfW) continue;
+        const running = di > dj ? dj : di;
+        if ((Math.floor(running) + phase) % nichePeriod === 0) {
+          raw[i][j] = Math.max(minHeight, raw[i][j] - nicheDeep);
+        }
+      }
+    }
+  }
+
+  // ── 4. Secondary fluting: a +1 buttress strip in mid-annulus of each tier ──
+  // Adds a second rhythm at half the niche frequency for fractal feel.
+  const subPeriod = nichePeriod * 2;
+  for (let k = 0; k < tiers; k++) {
+    const outerHalfW = tierWidths[k];
+    const innerHalfW = k < tiers - 1 ? tierWidths[k + 1] : 0;
+    if (outerHalfW - innerHalfW < 1.5) continue;
+    const phase = Math.floor(rng() * subPeriod);
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+        const cheb = Math.max(di, dj);
+        if (cheb >= outerHalfW || cheb < innerHalfW) continue;
+        const depthFrac = (cheb - innerHalfW) / Math.max(0.5, outerHalfW - innerHalfW);
+        if (depthFrac > 0.30 && depthFrac < 0.70) {
+          const running = di > dj ? dj : di;
+          if ((Math.floor(running) + phase) % subPeriod === 0) {
+            raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
+          }
+        }
+      }
+    }
+  }
+
+  // ── 5. Cardinal staircase ramps — depressed channel along each axis ──
+  const stairWidth = 0.55 + rng() * 0.35;
+  const stairDepth = 1 + (rng() > 0.7 ? 1 : 0);
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+      if (dj < stairWidth && di < tierWidths[0] - 0.3 && di > tierWidths[tiers - 1]) {
+        raw[i][j] = Math.max(minHeight, raw[i][j] - stairDepth);
+      }
+      if (di < stairWidth && dj < tierWidths[0] - 0.3 && dj > tierWidths[tiers - 1]) {
+        raw[i][j] = Math.max(minHeight, raw[i][j] - stairDepth);
+      }
+    }
+  }
+
+  // ── 6. Corner buttress bumps on each tier (some seeds skip; others stack) ──
+  const cornerStrength = 0.7 + rng() * 0.7;
+  for (let k = 0; k < tiers; k++) {
+    const off = tierWidths[k] - 0.6;
+    if (off < 1) continue;
+    placeGaussiansAt(raw, [
+      [cx - off, cx - off], [cx - off, cx + off],
+      [cx + off, cx - off], [cx + off, cx + off],
+    ], cornerStrength, 0.45, peakHeight);
+  }
+
+  // ── 7. Optional cardinal pylon bumps (mid-face turrets, every other tier) ──
+  if (rng() > 0.45) {
+    const pylonStride = 1 + Math.floor(rng() * 2);
+    for (let k = 0; k < tiers - 1; k += pylonStride) {
+      const off = tierWidths[k] - 0.5;
+      if (off < 1) continue;
+      placeGaussiansAt(raw, [
+        [cx - off, cx], [cx + off, cx], [cx, cx - off], [cx, cx + off],
+      ], 1.1, 0.55, peakHeight);
+    }
+  }
+
+  // ── 8. Top shrine — small block at the apex ──
+  const shrineExtent = rng() > 0.5 ? 1.0 : 1.5;
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const di = Math.abs(i - cx), dj = Math.abs(j - cx);
+      if (di < shrineExtent && dj < shrineExtent) {
+        raw[i][j] = peakHeight;
+      } else if (di < shrineExtent + 0.7 && dj < shrineExtent + 0.7) {
+        raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
+      }
+    }
+  }
+
+  // ── 9. Surrounding precinct wall (breaks up h=0 ground around base) ──
+  if (range >= 3) {
+    const precinctR = baseHalfW + 1.0;
+    if (precinctR < 15.5) {
+      const precinctH = minHeight + 1;
+      for (let i = 0; i < SIDE; i++) {
+        for (let j = 0; j < SIDE; j++) {
+          const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+          if (Math.abs(cheb - precinctR) < 0.55) {
+            raw[i][j] = Math.max(raw[i][j], precinctH);
+          }
+        }
+      }
+    }
+  }
+
+  // ── 10. Final D2 averaging pass ──
+  enforceD2(raw, minHeight, peakHeight);
+
+  return raw.map((row) => row.map(String));
+}
+
 

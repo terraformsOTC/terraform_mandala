@@ -37,15 +37,23 @@ export async function GET(_req, { params }) {
       console.error(`[image] ${tokenId}:`, err.message);
       return new NextResponse(FALLBACK_SVG, {
         status: 200,
-        headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' },
+        headers: { ...SVG_HEADERS, 'Cache-Control': 'no-store' },
       });
     }
   }
   return new NextResponse(svg, {
     status: 200,
-    headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=300' },
+    headers: { ...SVG_HEADERS, 'Cache-Control': 'public, max-age=300' },
   });
 }
+
+// Lock down direct navigation: SVG can host scripts when loaded as a top-level
+// document. CSP blocks all subresources/scripts; nosniff prevents MIME sniffing.
+const SVG_HEADERS = {
+  'Content-Type': 'image/svg+xml',
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:",
+};
 
 async function fetchSvg(tokenId) {
   const c = getContract();

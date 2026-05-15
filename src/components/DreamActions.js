@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { encode } from '@/lib/heightmap';
 import { sendEnterDream, sendCommitDream } from '@/lib/wallet';
+import { Modal } from './shared';
 
 // Status semantics confirmed in contract.js:
 //   0 Terrain      → must enterDream first to be eligible to commit
@@ -14,6 +15,7 @@ export default function DreamActions({ animData, walletAddress, heightmap, onCon
   const [phase, setPhase] = useState('idle');
   const [txHash, setTxHash] = useState(null);
   const [errMsg, setErrMsg] = useState(null);
+  const [commitModalOpen, setCommitModalOpen] = useState(false);
 
   const status = animData?.status;
   const owner = animData?.owner;
@@ -86,15 +88,28 @@ export default function DreamActions({ animData, walletAddress, heightmap, onCon
   const onEnterDream = () =>
     runTx('enterDream', () => sendEnterDream(tokenId));
 
-  const onCommitDream = () => {
+  // Encode once for the modal preview; re-encoded inside confirmCommit before send.
+  let encodedPreview = null;
+  let encodeError = null;
+  if (heightmap) {
+    try {
+      encodedPreview = encode(heightmap);
+    } catch (err) {
+      encodeError = err.message || 'cannot encode heightmap';
+    }
+  }
+
+  const confirmCommit = () => {
     let encoded;
     try {
       encoded = encode(heightmap);
     } catch (err) {
       setErrMsg(err.message || 'cannot encode heightmap');
       setPhase('error');
+      setCommitModalOpen(false);
       return;
     }
+    setCommitModalOpen(false);
     runTx('commitDreamToCanvas', () => sendCommitDream(tokenId, encoded));
   };
 
@@ -129,13 +144,16 @@ export default function DreamActions({ animData, walletAddress, heightmap, onCon
             <div className="flex gap-2 flex-wrap">
               <button
                 type="button"
-                disabled={busy || !heightmap}
+                disabled={busy || !heightmap || !!encodeError}
                 className="btn-primary btn-sm text-xs"
-                onClick={onCommitDream}
+                onClick={() => setCommitModalOpen(true)}
               >
                 [commit dream to canvas]
               </button>
             </div>
+            {encodeError && (
+              <p className="text-xs" style={{ color: '#f87171' }}>encoder: {encodeError}</p>
+            )}
           </>
         )}
 
@@ -160,6 +178,49 @@ export default function DreamActions({ animData, walletAddress, heightmap, onCon
 
         <TxStatus phase={phase} txHash={txHash} errMsg={errMsg} />
       </div>
+
+      <Modal
+        open={commitModalOpen}
+        onClose={() => setCommitModalOpen(false)}
+        title="confirm commit"
+      >
+        <div className="flex flex-col gap-3 text-xs">
+          <p className="opacity-80">
+            About to call{' '}
+            <code className="opacity-100">commitDreamToCanvas(#{tokenId}, &lt;uint256[16]&gt;)</code>.
+            This is an on-chain write — you&rsquo;ll pay gas, and the drawing replaces any current
+            canvas. You can erase later by re-entering daydream mode (another tx).
+          </p>
+          {encodedPreview && (
+            <pre
+              className="text-[10px] whitespace-pre-wrap break-all opacity-60 p-2"
+              style={{ border: '1px solid rgba(232,232,232,0.15)' }}
+            >
+              {encodedPreview[0].slice(0, 18)}… … {encodedPreview[15].slice(-18)}
+            </pre>
+          )}
+          <p className="opacity-60">
+            Always verify the tx details in your wallet before signing.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              className="btn-primary btn-sm text-xs"
+              onClick={() => setCommitModalOpen(false)}
+            >
+              [cancel]
+            </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm text-xs"
+              onClick={confirmCommit}
+              disabled={!heightmap || !!encodeError}
+            >
+              [confirm — send tx]
+            </button>
+          </div>
+        </div>
+      </Modal>
     </Card>
   );
 }

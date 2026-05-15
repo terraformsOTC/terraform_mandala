@@ -144,6 +144,37 @@ export default function MandalaControls({ params, onChange }) {
           </div>
         </Field>
       )}
+
+      {isTemple && (
+        <Field label="architectural inspiration">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.templeStyle === 'cathedral' ? 1 : 0.5 }}
+              onClick={() => update({ templeStyle: 'cathedral' })}
+            >
+              cathedral
+            </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.templeStyle === 'wat' ? 1 : 0.5 }}
+              onClick={() => update({ templeStyle: 'wat' })}
+            >
+              wat
+            </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.templeStyle === 'ziggurat' ? 1 : 0.5 }}
+              onClick={() => update({ templeStyle: 'ziggurat' })}
+            >
+              ziggurat
+            </button>
+          </div>
+        </Field>
+      )}
     </div>
   );
 }

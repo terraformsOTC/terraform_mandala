@@ -7,11 +7,11 @@ import ParcelGrid from '@/components/ParcelGrid';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
-import { DEFAULTS } from '@/lib/mandala';
+import { DEFAULTS, TEMPLE_STYLES } from '@/lib/mandala';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'smooth', 'terraces',
+  'algo', 'rings', 'terraces', 'style',
 ];
 
 export default function Home() {
@@ -80,9 +80,17 @@ function HomeInner() {
       return;
     }
     try {
+      // Chain check FIRST. Refusing to connect on the wrong chain is friendlier
+      // than connecting and then erroring on every signing attempt.
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (chainId !== '0x1') {
+        setError('Switch your wallet to Ethereum mainnet, then reconnect.');
+        return;
+      }
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       const addr = accounts[0];
       setWalletAddress(addr);
+      setError(null);
       await loadWallet(addr);
     } catch (err) {
       if (err?.code !== 4001) setError(err.message || 'wallet connection failed');
@@ -97,7 +105,7 @@ function HomeInner() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.ethereum?.on) return;
-    const handler = (accounts) => {
+    const onAccountsChanged = (accounts) => {
       const next = accounts?.[0];
       if (!next) {
         disconnectWallet();
@@ -108,8 +116,19 @@ function HomeInner() {
       setWalletAddress(next);
       loadWallet(next);
     };
-    window.ethereum.on('accountsChanged', handler);
-    return () => window.ethereum.removeListener?.('accountsChanged', handler);
+    const onChainChanged = (chainId) => {
+      // Any chain switch away from mainnet drops the session. User must reconnect.
+      if (chainId !== '0x1') {
+        disconnectWallet();
+        setError('Wallet switched off Ethereum mainnet — disconnected. Switch back, then reconnect.');
+      }
+    };
+    window.ethereum.on('accountsChanged', onAccountsChanged);
+    window.ethereum.on('chainChanged', onChainChanged);
+    return () => {
+      window.ethereum.removeListener?.('accountsChanged', onAccountsChanged);
+      window.ethereum.removeListener?.('chainChanged', onChainChanged);
+    };
   }, [disconnectWallet, loadWallet]);
 
   useEffect(() => {
@@ -154,6 +173,7 @@ function HomeInner() {
     if (params.algorithm !== DEFAULTS.algorithm) next.set('algo', params.algorithm);
     if (params.ringCount !== DEFAULTS.ringCount) next.set('rings', String(params.ringCount));
     if (params.terraceCount !== DEFAULTS.terraceCount) next.set('terraces', String(params.terraceCount));
+    if (params.templeStyle !== DEFAULTS.templeStyle) next.set('style', params.templeStyle);
     const qs = next.toString();
     const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
     window.history.replaceState(null, '', url);
@@ -202,7 +222,31 @@ function HomeInner() {
           </form>
         </div>
 
-        {/* wallet parcels section temporarily disabled */}
+        {walletAddress && (
+          <section className="mt-8">
+            <div className="flex items-baseline gap-3 mb-2">
+              <h2 className="text-sm opacity-60 uppercase tracking-wider">
+                your parcels
+              </h2>
+              <button
+                type="button"
+                className="text-xs opacity-50 hover:opacity-100"
+                onClick={() => loadWallet(walletAddress)}
+                disabled={parcelsLoading}
+                title="refetch from chain"
+              >
+                {parcelsLoading ? '[refreshing…]' : '[refresh]'}
+              </button>
+            </div>
+            <ParcelGrid
+              parcels={parcels}
+              selectedTokenId={selectedTokenId}
+              onSelect={setSelectedTokenId}
+              loading={parcelsLoading}
+              address={walletAddress}
+            />
+          </section>
+        )}
 
         {selectedTokenId != null && (
           <section className="mt-10 pt-6 border-t border-current border-opacity-10">
@@ -236,6 +280,7 @@ function paramsFromUrl(searchParams) {
     return Number.isInteger(v) && v >= lo && v <= hi ? v : fallback;
   };
   const algo = searchParams.get('algo');
+  const styleParam = searchParams.get('style');
   return {
     seed,
     algorithm: algo === 'rings' ? 'rings' : algo === 'temple' ? 'temple' : 'classic',
@@ -246,6 +291,6 @@ function paramsFromUrl(searchParams) {
     minHeight: num('min', 0, 9, DEFAULTS.minHeight),
     ringCount: num('rings', 2, 20, DEFAULTS.ringCount),
     terraceCount: num('terraces', 2, 12, DEFAULTS.terraceCount),
-    smoothing: 0,
+    templeStyle: TEMPLE_STYLES.includes(styleParam) ? styleParam : DEFAULTS.templeStyle,
   };
 }

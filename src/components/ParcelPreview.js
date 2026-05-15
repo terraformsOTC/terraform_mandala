@@ -28,6 +28,7 @@ export default function ParcelPreview({ animData, heightmap, width = 388, height
       title="parcel preview"
       srcDoc={srcDoc}
       sandbox="allow-scripts"
+      referrerPolicy="no-referrer"
       width={width}
       height={height}
       style={{ border: 'none', background: animData?.bg || '#000' }}

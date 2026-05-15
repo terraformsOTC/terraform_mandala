@@ -18,7 +18,6 @@ export default async function Image() {
     peakHeight: 9,
     minHeight: 0,
     ringCount: 8,
-    smoothing: 1,
   });
 
   const cellPx = 14;
