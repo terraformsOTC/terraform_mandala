@@ -6,6 +6,7 @@ import MandalaControls from './MandalaControls';
 import HeightmapInspector from './HeightmapInspector';
 import ParcelPreview from './ParcelPreview';
 import DreamActions from './DreamActions';
+import ExportGifButton from './ExportGifButton';
 import { randomSeed } from '@/lib/seedrandom';
 
 export default function MandalaDesigner({
@@ -53,6 +54,11 @@ export default function MandalaDesigner({
         <ParcelPreview
           animData={animData}
           heightmap={generated.heightmap}
+        />
+        <ExportGifButton
+          animData={animData}
+          heightmap={generated.heightmap}
+          tokenId={animData?.tokenId}
         />
       </div>
     </div>
