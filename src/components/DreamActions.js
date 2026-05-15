@@ -120,6 +120,8 @@ export default function DreamActions({ animData, walletAddress, heightmap, onCon
           <>
             <p className="text-xs opacity-60">
               This parcel is in Terrain mode. Enter daydream mode first, then commit your mandala.
+              Warning! This action is irreversible. Daydreaming is a one way process and terrain
+              heightmaps cannot be recovered once a parcel&rsquo;s mode is changed.
             </p>
             <div className="flex gap-2 flex-wrap">
               <button

@@ -182,9 +182,14 @@ function generateRings(rng, ringCount, minHeight, peakHeight) {
 //    arms with rib bays, pinnacle clusters at the crossing, arm-tip turrets,
 //    diagonal flying buttresses, cloister wall.
 //
-//  - generateWat: quincunx 5-tower layout (central sikhara + 4 corner
-//    sikharas), nested Chebyshev galleries with naga balustrade rhythm,
-//    cardinal causeway depressions, mini-stupa ring.
+//  - generateWat: Thai/Khmer prang-style temple complex. Stepped pedestal
+//    terraces support a central prang that tapers in discrete Chebyshev
+//    steps to a needle finial at peakHeight. Each step is fringed with
+//    crockets (cardinal+diagonal +1 bumps), wing-prangs project at
+//    mid-height, four corner satellite prangs repeat the stepped-and-
+//    crocketed pattern at smaller scale, cardinal mini-prangs and an
+//    outer chedi ring fill the precinct, with naga balustrades on every
+//    tier rim and cardinal causeway depressions for entry paths.
 //
 //  - generateZiggurat: stacked Chebyshev tiers with recessed-niche fluting on
 //    every tier face (multi-scale), corner buttresses on each tier, cardinal
@@ -410,61 +415,45 @@ function generateWat(rng, terraceCount, minHeight, peakHeight) {
   const range = peakHeight - minHeight;
   const raw = Array.from({ length: SIDE }, () => new Array(SIDE).fill(minHeight));
 
-  const galleryCount = terraceCount;
-  // Outermost gallery starts at min+1 (not 0) so the outer band still has architecture.
-  const galleryRamp = 0.45 + rng() * 0.20;
-  // Seed picks corner-tower placement: closer-in vs further-out.
-  const cornerR = 5.0 + (terraceCount - 4) * 0.25 + rng() * 1.2;
-
-  // ── 1. Nested Chebyshev galleries; height ramps inward toward center ──
+  // ── 1. Pedestal terraces (Mount Meru base) ──
+  // Stepped Chebyshev pyramid from outer perimeter inward. Total rise capped
+  // at ~30% of range so there's plenty of vertical room for the spires above.
+  const pedTiers = Math.max(1, Math.min(terraceCount, 3 + Math.floor(rng() * 2)));
+  const pedRise = Math.max(1, Math.min(pedTiers, Math.round(range * 0.30)));
+  const pedTierH = Math.max(1, Math.floor(pedRise / pedTiers));
+  const pedMaxCheb = 13.0;
+  const pedTopH = minHeight + 1 + pedTierH * pedTiers;
   for (let i = 0; i < SIDE; i++) {
     for (let j = 0; j < SIDE; j++) {
       const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
-      const frac = cheb / 15.5;
-      const idx = Math.min(galleryCount - 1, Math.floor(frac * galleryCount));
-      const inward = (galleryCount - 1 - idx) / Math.max(1, galleryCount - 1);
-      raw[i][j] = minHeight + 1 + Math.round(inward * range * galleryRamp);
+      if (cheb >= pedMaxCheb) continue;
+      const idx = Math.floor((1 - cheb / pedMaxCheb) * pedTiers);
+      raw[i][j] = Math.max(raw[i][j], Math.min(peakHeight, minHeight + 1 + idx * pedTierH));
     }
   }
 
-  // ── 1b. Courtyard tile relief — checkerboard +1 breaks up flat gallery floors ──
-  // Phase varies by seed so the tile pattern doesn't always align identically.
-  const tilePhase = Math.floor(rng() * 2);
-  for (let i = 0; i < SIDE; i++) {
-    for (let j = 0; j < SIDE; j++) {
-      const di = Math.abs(i - cx), dj = Math.abs(j - cx);
-      // Don't relief the immediate center (would break the central tower base).
-      if (Math.max(di, dj) < 1.0) continue;
-      if ((Math.floor(di) + Math.floor(dj) + tilePhase) % 2 === 0) {
-        raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
-      }
-    }
-  }
-
-  // ── 2. Gallery wall ridges at each gallery boundary ──
-  const wallBoost = 1 + (rng() > 0.65 ? 1 : 0);
-  for (let g = 1; g < galleryCount; g++) {
-    const wallCheb = 15.5 * (g / galleryCount);
+  // ── 2. Tier-rim ridges (+1 right at each terrace boundary) ──
+  for (let t = 1; t <= pedTiers; t++) {
+    const rimCheb = pedMaxCheb * (1 - t / pedTiers);
     for (let i = 0; i < SIDE; i++) {
       for (let j = 0; j < SIDE; j++) {
         const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
-        if (Math.abs(cheb - wallCheb) < 0.55) {
-          raw[i][j] = Math.min(peakHeight, raw[i][j] + wallBoost);
+        if (Math.abs(cheb - rimCheb) < 0.55) {
+          raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
         }
       }
     }
   }
 
-  // ── 3. Naga balustrade — rhythmic +1 every 2 cells along each gallery wall ──
-  // Seed-driven phase shift makes each seed's naga rhythm different.
-  for (let g = 1; g < galleryCount; g++) {
-    const wallCheb = 15.5 * (g / galleryCount);
+  // ── 3. Naga balustrade — rhythmic +1 every 2 cells along each tier rim ──
+  for (let t = 1; t <= pedTiers; t++) {
+    const rimCheb = pedMaxCheb * (1 - t / pedTiers);
     const phase = Math.floor(rng() * 2);
     for (let i = 0; i < SIDE; i++) {
       for (let j = 0; j < SIDE; j++) {
         const di = Math.abs(i - cx), dj = Math.abs(j - cx);
         const cheb = Math.max(di, dj);
-        if (Math.abs(cheb - wallCheb) >= 1.0) continue;
+        if (Math.abs(cheb - rimCheb) >= 1.0) continue;
         const running = di > dj ? dj : di;
         if ((Math.floor(running) + phase) % 2 === 0) {
           raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
@@ -473,77 +462,153 @@ function generateWat(rng, terraceCount, minHeight, peakHeight) {
     }
   }
 
-  // ── 4. Quincunx sikharas: central + 4 corner towers ──
-  // Central tower is the tallest. Corner towers boosted so they read clearly
-  // against the gallery base. Each tower is a multi-tier corbeled stack.
-  const cornerScale = 0.78 + rng() * 0.12;
-  const placeTower = (tr, tc, scale, sharpness) => {
-    const ttiers = 4 + Math.floor(rng() * 3);
-    for (let t = 0; t < ttiers; t++) {
-      const sigma = (2.4 - t * 0.42) * scale * sharpness;
-      const amp = Math.round(range * scale * (0.13 + t * 0.09));
-      placeGaussiansAt(raw, [[tr, tc]], amp, sigma, peakHeight);
+  // ── 4. Courtyard tile relief — checkerboard +1 breaks any wide flat patches ──
+  // Applied only on the open pedestal floor (outside the prang footprint).
+  const tilePhase = Math.floor(rng() * 2);
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+      if (cheb < 5.0 || cheb >= pedMaxCheb) continue;
+      const di = Math.floor(Math.abs(i - cx)), dj = Math.floor(Math.abs(j - cx));
+      if ((di + dj + tilePhase) % 2 === 0) {
+        raw[i][j] = Math.min(peakHeight, raw[i][j] + 1);
+      }
     }
-  };
-  placeTower(cx, cx, 1.0, 1.0);
-  placeTower(cx - cornerR, cx - cornerR, cornerScale, 0.95);
-  placeTower(cx - cornerR, cx + cornerR, cornerScale, 0.95);
-  placeTower(cx + cornerR, cx - cornerR, cornerScale, 0.95);
-  placeTower(cx + cornerR, cx + cornerR, cornerScale, 0.95);
+  }
 
-  // ── 5. Cardinal mini-prangs (4 small towers between the corner towers) ──
-  // Sits on the cardinal axes at roughly cornerR — creates an 8-spire cross-quincunx
-  // when present. Seed gate so not every wat has them.
-  if (rng() > 0.35) {
-    const cardR = cornerR * (0.85 + rng() * 0.25);
-    const cardSig = 0.55 + rng() * 0.2;
-    const cardAmp = range * (0.18 + rng() * 0.12);
+  // ── 5. CENTRAL PRANG — stepped tapering spire to needle finial ──
+  // Discrete Chebyshev tiers narrow inward; quantization gives the silhouette
+  // its characteristic stair-stepped Thai/Khmer prang profile. Each tier sits
+  // at a distinct height level, so the spire has a fractal, layered look
+  // rather than a smooth Gaussian bell.
+  const prangBase = 4.0 + (terraceCount - 4) * 0.18 + rng() * 0.5;
+  const prangSteps = 5 + Math.floor(rng() * 3);  // 5–7 discrete tiers
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const cheb = Math.max(Math.abs(i - cx), Math.abs(j - cx));
+      if (cheb > prangBase) continue;
+      const frac = 1 - cheb / prangBase;
+      const stepIdx = Math.min(prangSteps, Math.floor(frac * (prangSteps + 0.5)));
+      const h = Math.round(pedTopH + (peakHeight - pedTopH) * (stepIdx / prangSteps));
+      raw[i][j] = Math.max(raw[i][j], Math.min(peakHeight, h));
+    }
+  }
+  // Pin the four center cells to peakHeight — the needle tip
+  raw[15][15] = raw[15][16] = raw[16][15] = raw[16][16] = peakHeight;
+
+  // ── 5b. Crocket rings on each prang step (the studded Wat Arun silhouette) ──
+  // Eight small +1 bumps at cardinal + diagonal positions on each tier's rim.
+  for (let s = 1; s < prangSteps; s++) {
+    const sCheb = prangBase * (1 - s / prangSteps);
+    const diagR = sCheb * 0.707;
+    placeGaussiansAt(raw, [
+      [cx - sCheb, cx], [cx + sCheb, cx],
+      [cx, cx - sCheb], [cx, cx + sCheb],
+      [cx - diagR, cx - diagR], [cx - diagR, cx + diagR],
+      [cx + diagR, cx - diagR], [cx + diagR, cx + diagR],
+    ], 1, 0.32, peakHeight);
+  }
+
+  // ── 6. Wing-prangs — 4 mid-height cardinal protrusions from the prang base ──
+  // Creates the cross-shape silhouette at intermediate height, like the wings
+  // off Wat Arun's central tower. Each is a small Gaussian column.
+  const wingDist = prangBase * (0.55 + rng() * 0.15);
+  const wingTopFrac = 0.45 + rng() * 0.15;
+  const wingTopH = pedTopH + Math.floor((peakHeight - pedTopH) * wingTopFrac);
+  placeGaussiansAt(raw, [
+    [cx - wingDist, cx], [cx + wingDist, cx],
+    [cx, cx - wingDist], [cx, cx + wingDist],
+  ], Math.max(1, wingTopH - minHeight), 0.55, peakHeight);
+  // Wing finial crockets (+1 on top of each wing)
+  placeGaussiansAt(raw, [
+    [cx - wingDist, cx], [cx + wingDist, cx],
+    [cx, cx - wingDist], [cx, cx + wingDist],
+  ], 1, 0.25, peakHeight);
+
+  // ── 7. SATELLITE PRANGS — 4 corner mini-spires (recursive stepped pattern) ──
+  // Each is its own stepped prang at smaller scale, sitting on the pedestal top.
+  const satDist = 7.0 + rng() * 1.2;
+  const satBase = 1.9 + rng() * 0.5;
+  const satSteps = 3 + Math.floor(rng() * 2);
+  const satTopH = pedTopH + Math.max(2, Math.floor((peakHeight - pedTopH) * (0.65 + rng() * 0.15)));
+  const corners = [
+    [cx - satDist, cx - satDist], [cx - satDist, cx + satDist],
+    [cx + satDist, cx - satDist], [cx + satDist, cx + satDist],
+  ];
+  for (const [tr, tc] of corners) {
+    for (let i = 0; i < SIDE; i++) {
+      for (let j = 0; j < SIDE; j++) {
+        const cheb = Math.max(Math.abs(i - tr), Math.abs(j - tc));
+        if (cheb > satBase) continue;
+        const frac = 1 - cheb / satBase;
+        const stepIdx = Math.min(satSteps, Math.floor(frac * (satSteps + 0.5)));
+        const h = Math.round(pedTopH + (satTopH - pedTopH) * (stepIdx / satSteps));
+        raw[i][j] = Math.max(raw[i][j], Math.min(peakHeight, h));
+      }
+    }
+  }
+  // Crockets ringing each satellite spire (level-2 fractal detail)
+  for (let s = 1; s < satSteps; s++) {
+    const sCheb = satBase * (1 - s / satSteps);
+    const diagR = sCheb * 0.707;
+    for (const [tr, tc] of corners) {
+      placeGaussiansAt(raw, [
+        [tr - sCheb, tc], [tr + sCheb, tc],
+        [tr, tc - sCheb], [tr, tc + sCheb],
+        [tr - diagR, tc - diagR], [tr - diagR, tc + diagR],
+        [tr + diagR, tc - diagR], [tr + diagR, tc + diagR],
+      ], 1, 0.28, peakHeight);
+    }
+  }
+
+  // ── 8. Cardinal mini-prangs — 4 medium spires on the axes between satellites ──
+  if (rng() > 0.30) {
+    const cardR = satDist * (0.95 + rng() * 0.15);
+    const cardH = pedTopH + Math.floor((satTopH - pedTopH) * 0.55);
     placeGaussiansAt(raw, [
       [cx - cardR, cx], [cx + cardR, cx], [cx, cx - cardR], [cx, cx + cardR],
-    ], cardAmp, cardSig, peakHeight);
-  }
-
-  // ── 6. Mini-stupa ring just inside the innermost gallery ──
-  if (galleryCount >= 3) {
-    const stupaR = 15.5 * (1 / galleryCount) * (1.3 + rng() * 0.5);
-    const diag = stupaR * 0.707;
+    ], Math.max(1, cardH - minHeight), 0.55, peakHeight);
     placeGaussiansAt(raw, [
-      [cx - stupaR, cx], [cx + stupaR, cx],
-      [cx, cx - stupaR], [cx, cx + stupaR],
-      [cx - diag, cx - diag], [cx - diag, cx + diag],
-      [cx + diag, cx - diag], [cx + diag, cx + diag],
-    ], range * (0.09 + rng() * 0.06), 0.4, peakHeight);
+      [cx - cardR, cx], [cx + cardR, cx], [cx, cx - cardR], [cx, cx + cardR],
+    ], 1, 0.25, peakHeight);
   }
 
-  // ── 7. Cardinal causeway depressions (4 channels into the heart) ──
+  // ── 9. Outer chedi ring — 8 tiny finials near the pedestal perimeter ──
+  if (range >= 4) {
+    const ringR = pedMaxCheb * 0.86;
+    const diagR = ringR * 0.707;
+    const chediAmp = Math.max(2, Math.floor(range * 0.22));
+    placeGaussiansAt(raw, [
+      [cx - ringR, cx], [cx + ringR, cx],
+      [cx, cx - ringR], [cx, cx + ringR],
+      [cx - diagR, cx - diagR], [cx - diagR, cx + diagR],
+      [cx + diagR, cx - diagR], [cx + diagR, cx + diagR],
+    ], chediAmp, 0.4, peakHeight);
+    // Crocket tip on each chedi
+    placeGaussiansAt(raw, [
+      [cx - ringR, cx], [cx + ringR, cx],
+      [cx, cx - ringR], [cx, cx + ringR],
+      [cx - diagR, cx - diagR], [cx - diagR, cx + diagR],
+      [cx + diagR, cx - diagR], [cx + diagR, cx + diagR],
+    ], 1, 0.22, peakHeight);
+  }
+
+  // ── 10. Cardinal causeway depressions (entry paths from outer to satellite ring) ──
   const cwDepth = 1;
-  const cwWidth = 0.5 + rng() * 0.3;
+  const cwWidth = 0.55 + rng() * 0.25;
   for (let i = 0; i < SIDE; i++) {
     for (let j = 0; j < SIDE; j++) {
       const di = Math.abs(i - cx), dj = Math.abs(j - cx);
-      if (dj < cwWidth && di > 2 && di < 14) {
+      if (dj < cwWidth && di > satDist + 0.8 && di < pedMaxCheb - 0.3) {
         raw[i][j] = Math.max(minHeight, raw[i][j] - cwDepth);
       }
-      if (di < cwWidth && dj > 2 && dj < 14) {
+      if (di < cwWidth && dj > satDist + 0.8 && dj < pedMaxCheb - 0.3) {
         raw[i][j] = Math.max(minHeight, raw[i][j] - cwDepth);
       }
     }
   }
 
-  // ── 8. Diagonal causeways to corner towers (subtle uplift ridge) ──
-  if (rng() > 0.35) {
-    const diagBoost = 1;
-    for (let i = 0; i < SIDE; i++) {
-      for (let j = 0; j < SIDE; j++) {
-        const di = Math.abs(i - cx), dj = Math.abs(j - cx);
-        if (Math.abs(di - dj) < 0.5 && di > 1.5 && di < cornerR - 0.5) {
-          raw[i][j] = Math.min(peakHeight, raw[i][j] + diagBoost);
-        }
-      }
-    }
-  }
-
-  // ── 9. Outer enclosure wall (the famous Angkor Wat outer perimeter) ──
+  // ── 11. Outer enclosure wall (precinct perimeter) ──
   if (range >= 3) {
     const encloseR = 14.0;
     const encH = minHeight + 1 + Math.floor(rng() * 2);
@@ -557,7 +622,7 @@ function generateWat(rng, terraceCount, minHeight, peakHeight) {
     }
   }
 
-  // ── 10. Final D2 averaging pass ──
+  // ── 12. Final D2 averaging pass ──
   enforceD2(raw, minHeight, peakHeight);
 
   return raw.map((row) => row.map(String));
