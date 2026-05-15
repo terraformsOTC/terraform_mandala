@@ -41,7 +41,6 @@ function HomeInner() {
   const [tokenInput, setTokenInput] = useState(() => searchParams.get('token') || '');
   const [animData, setAnimData] = useState(null);
   const [animLoading, setAnimLoading] = useState(false);
-  const [animRefreshKey, setAnimRefreshKey] = useState(0);
 
   const [params, setParams] = useState(() => paramsFromUrl(searchParams) || defaultParams());
 
@@ -156,7 +155,7 @@ function HomeInner() {
     return () => {
       cancelled = true;
     };
-  }, [selectedTokenId, animRefreshKey]);
+  }, [selectedTokenId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -258,8 +257,6 @@ function HomeInner() {
                 animData={animData}
                 params={params}
                 onParamsChange={setParams}
-                walletAddress={walletAddress}
-                onTxConfirmed={() => setAnimRefreshKey((k) => k + 1)}
               />
             )}
           </section>

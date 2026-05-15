@@ -60,16 +60,9 @@ Heightmap is 1024 chars (digits 0–9), arranged as 32 rows × 32 cols (row-majo
 
 (currently empty)
 
-## Onchain actions (v2)
+## Onchain actions
 
-- `DreamActions.js` gates buttons on (wallet connected) + (owner === connected) + status:
-  - status 0 (Terrain) → `[enter daydream mode]` calls `enterDream`
-  - status 1 (Daydream) → `[commit dream to canvas]` calls `commitDreamToCanvas` with the encoded `uint256[16]`
-  - status 2 (Terraformed) → `[erase drawing]` re-calls `enterDream`
-  - status 3 (Origin) and unminted parcels are hard-locked
-- `src/lib/wallet.js` wraps the writes via ethers v6 `BrowserProvider` + signer, asserts mainnet (chainId 1n) before signing.
-- `src/app/api/parcel/[tokenId]/animdata` returns `owner` (null for unminted) for the ownership gate.
-- After tx confirms (`tx.wait(1)`), `page.js` bumps `animRefreshKey` and the animdata refetches. Server-side `tokenHTML` cache (60s TTL) may briefly serve stale rendered HTML; status flips immediately because that fetch isn't cached.
+Deliberately removed. The site is **read-only** with respect to Ethereum: wallet connect is wired up so users can browse their owned parcels in the grid, but there is no signer-side code path that submits a transaction. The blast radius if the site is ever compromised was judged too large. Users who want to commit a heightmap copy the encoded `uint256[16]` array from `HeightmapInspector` and submit it manually via Etherscan. Do not re-add `signer.sendTransaction` / `contract.connect(signer)` paths without an explicit ask.
 
 ## SEO / OpenGraph
 
