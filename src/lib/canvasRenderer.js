@@ -59,7 +59,7 @@ function extractFontFaces(html) {
   return faces;
 }
 
-async function loadFonts(faces) {
+async function loadFonts(faces, fontPx = 14) {
   if (typeof document === 'undefined' || typeof FontFace === 'undefined') return [];
   const loaded = [];
   for (const f of faces) {
@@ -69,17 +69,30 @@ async function loadFonts(faces) {
     }
     if (alreadyLoaded) { loaded.push(f.family); continue; }
     try {
+      // Important: pass just `url(data:...)` with NO format hint. The on-chain
+      // HTML declares `format('woff')` even though the bytes are actually woff2
+      // — if we propagate that mismatched hint here, strict browsers reject the
+      // load. Letting the browser sniff the magic bytes always works.
       const face = new FontFace(f.family, `url(${f.dataUrl})`);
       await face.load();
       document.fonts.add(face);
       loaded.push(f.family);
-    } catch { /* keep going; canvas will fall back to monospace */ }
+    } catch (err) {
+      // Surface load failures so the user can see in devtools why glyphs
+      // fall back to monospace.
+      if (typeof console !== 'undefined') {
+        console.warn(`[mandala] FontFace load failed for ${f.family}:`, err);
+      }
+    }
   }
-  // Force the browser to actually resolve these fonts for canvas use. Without
-  // this prime step, ctx.fillText can still hit the monospace fallback on the
-  // first frame even though the FontFace is registered.
+  // Prime each loaded family at the exact size we'll render with, then await
+  // document.fonts.ready. Without this the very first ctx.fillText can still
+  // hit the monospace fallback even though the FontFace is registered.
   if (document.fonts && document.fonts.load) {
-    await Promise.all(loaded.map((fam) => document.fonts.load(`14px "${fam}"`).catch(() => {})));
+    await Promise.all(loaded.map((fam) =>
+      document.fonts.load(`${fontPx}px "${fam}"`).catch(() => {})
+    ));
+    try { await document.fonts.ready; } catch { /* ignore */ }
   }
   return loaded;
 }
@@ -218,10 +231,13 @@ function buildCharSets(c) {
   return { charSet, mainSet, drive, coreCharsetLength: bCore.length };
 }
 
-export async function prepareRenderer(html) {
+export async function prepareRenderer(html, opts = {}) {
   if (!html) throw new Error('canvasRenderer: no html supplied');
   const faces = extractFontFaces(html);
-  const fontFamilies = await loadFonts(faces);
+  // Prime fonts at the size we'll actually render with. Browsers cache font
+  // loads per (family, size), so priming at the wrong size can still cause the
+  // first frame to render with fallback while the right-size font loads.
+  const fontFamilies = await loadFonts(faces, opts.primeFontPx || 14);
 
   const scriptText = decodeScriptText(html);
   const constants = parseScriptConstants(scriptText);
@@ -326,12 +342,21 @@ function colorAtTime(cls, t, state) {
 // Paint one frame onto ctx. timeMs is the simulated time-since-page-load that
 // drives CSS keyframe progress; airship grows from that (0.1 * ms per the
 // on-chain terraLoop). caller sizes the canvas.
+//
+// Geometry matches the on-chain iframe: 388×560 outer box with 24px padding,
+// 32 cells × 16px tall (height fits exactly), columns spaced inside the
+// remaining content width. Font size is 14px to match the on-chain .r rule.
 export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
   const width = opts.width || ctx.canvas.width;
   const height = opts.height || ctx.canvas.height;
-  const cellW = width / 32;
-  const cellH = height / 32;
-  // On-chain uses 14px in a 16px row; scale that ratio to whatever cell size we have.
+  // Match iframe layout: scale the 24/388 padding ratio + 14/16 font ratio to
+  // whatever canvas we're given, so cell geometry matches the iframe.
+  const padX = (opts.padding != null ? opts.padding : 24) * (width / 388);
+  const padY = (opts.padding != null ? opts.padding : 24) * (height / 560);
+  const gridW = width - 2 * padX;
+  const gridH = height - 2 * padY;
+  const cellW = gridW / 32;
+  const cellH = gridH / 32;
   const fontPx = Math.max(6, Math.round(cellH * (14 / 16)));
 
   ctx.fillStyle = state.bg || '#000';
@@ -339,6 +364,11 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
   ctx.font = `${fontPx}px ${state.fontFamilyCss}`;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
+  // Force the browser to actually parse the font string before we start
+  // drawing — measureText triggers the font load + selection pipeline that
+  // ctx.fillText otherwise defers, which can make the first frame fall back
+  // to monospace even when the FontFace is registered.
+  ctx.measureText('█');
 
   const airship = 0.1 * timeMs;
   const charSetLen = state.charSet.length;
@@ -374,7 +404,7 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
         ch = heightChars[h];
       }
       ctx.fillStyle = color;
-      ctx.fillText(ch, c * cellW + cellW / 2, r * cellH + cellH / 2);
+      ctx.fillText(ch, padX + c * cellW + cellW / 2, padY + r * cellH + cellH / 2);
     }
   }
 }

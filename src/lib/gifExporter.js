@@ -6,7 +6,9 @@ import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import { prepareRenderer, renderFrame } from './canvasRenderer.js';
 
 export const DEFAULT_GIF_OPTS = {
-  width: 384,
+  // Match the on-chain iframe's outer box exactly so cell geometry and font
+  // size align with what the user sees in the preview.
+  width: 388,
   height: 560,
   fps: 12,
   durationSec: 5,
@@ -27,7 +29,12 @@ export async function exportGif({ animData, heightmap, tokenId, options, onProgr
   const totalFrames = Math.max(2, Math.round(fps * durationSec));
   const delay = Math.round(1000 / fps);
 
-  const state = await prepareRenderer(animData?.html);
+  // Compute the exact font size renderFrame will use so we prime FontFace at
+  // the right (family, size) tuple — otherwise the very first frame can still
+  // render with monospace fallback while the browser loads the right size.
+  const cellH = (height - 2 * (24 * (height / 560))) / 32;
+  const renderFontPx = Math.max(6, Math.round(cellH * (14 / 16)));
+  const state = await prepareRenderer(animData?.html, { primeFontPx: renderFontPx });
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
