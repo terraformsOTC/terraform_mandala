@@ -21,6 +21,26 @@ const TOTAL_MINTED = 9911;
 // get patched out before returning. Picked an arbitrary mid-range mint.
 const V2_TEMPLATE_TOKEN_ID = 1627;
 
+// Per-biome font-size in px. The v2 contract picks a font-size for each biome
+// (the BIOMECODE glyphs are designed at biome-specific sizes so the resulting
+// p-tag fills its cell). Without this, every unminted parcel rendered at the
+// template's font-size (14px for biome 89) regardless of biome — biomes that
+// need 22px+ rendered at half size. Derived by sampling minted parcels via
+// the contract; gaps (73/74/77/78 + 92-99) fall back to BIOME_FONT_SIZE_DEFAULT.
+const BIOME_FONT_SIZE_DEFAULT = 14;
+const BIOME_FONT_SIZE = {
+  0: 27, 1: 18, 2: 18, 3: 18, 4: 26, 5: 23, 6: 23, 7: 18, 8: 22, 9: 18,
+  10: 18, 11: 18, 12: 22, 13: 18, 14: 17, 15: 18, 16: 18, 17: 26, 18: 14, 19: 18,
+  20: 20, 21: 20, 22: 22, 23: 18, 24: 13, 25: 20, 26: 22, 27: 22, 28: 22, 29: 22,
+  30: 20, 31: 22, 32: 15, 33: 15, 34: 18, 35: 24, 36: 23, 37: 14, 38: 18, 39: 18,
+  40: 16, 41: 20, 42: 25, 43: 14, 44: 15, 45: 16, 46: 12, 47: 12, 48: 12, 49: 18,
+  50: 15, 51: 16, 52: 16, 53: 16, 54: 11, 55: 12, 56: 15, 57: 12, 58: 14, 59: 14,
+  60: 16, 61: 16, 62: 13, 63: 13, 64: 14, 65: 12, 66: 13, 67: 11, 68: 12, 69: 12,
+  70: 10, 71: 9, 72: 9, 75: 12, 76: 14, 79: 12,
+  80: 12, 81: 14, 82: 14, 83: 12, 84: 14, 85: 15, 86: 17, 87: 22, 88: 17, 89: 14,
+  90: 14, 91: 14,
+};
+
 const CACHE_MAX = 200;
 const CACHE_TTL_MS = 5 * 60_000;
 const cache = new Map();
@@ -186,6 +206,16 @@ function patchV2Template(template, est) {
   out = out.replace(
     /(\.r\{[^}]*?background-color:)#[0-9a-fA-F]+/,
     `$1${bg}`,
+  );
+
+  // 2b. Replace .r font-size with the unminted biome's value. The v2 contract
+  // picks font-size per biome so BIOMECODE glyphs fill their cell — without
+  // this patch, biomes that should render at 22-27px were stuck at 14px (the
+  // template's biome-89 value), giving the "glyphs are too small" symptom.
+  const biomeFs = BIOME_FONT_SIZE[trBiome] ?? BIOME_FONT_SIZE_DEFAULT;
+  out = out.replace(
+    /(\.r\{[^}]*?font-size:)\d+px/,
+    `$1${biomeFs}px`,
   );
 
   // 3. Rewrite @keyframes x with a 10-stop cycle through the unminted palette.
