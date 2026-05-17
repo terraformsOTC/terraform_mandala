@@ -61,6 +61,14 @@ function extractFontFaces(html) {
 
 async function loadFonts(faces, fontPx = 14) {
   if (typeof document === 'undefined' || typeof FontFace === 'undefined') return [];
+  // Also inject @font-face rules into the document via a <style> tag. Canvas
+  // text rendering goes through the CSS font selection pipeline, and some
+  // browsers are flakier about picking up FontFace-API-only fonts in
+  // ctx.fillText than they are about picking up CSS @font-face rules. Having
+  // both belt-and-suspenders eliminates the per-char fallback to system fonts
+  // that produced thin/emoji glyphs in the GIF.
+  injectFontFaceStyle(faces);
+
   const loaded = [];
   for (const f of faces) {
     let alreadyLoaded = false;
@@ -78,23 +86,77 @@ async function loadFonts(faces, fontPx = 14) {
       document.fonts.add(face);
       loaded.push(f.family);
     } catch (err) {
-      // Surface load failures so the user can see in devtools why glyphs
-      // fall back to monospace.
       if (typeof console !== 'undefined') {
         console.warn(`[mandala] FontFace load failed for ${f.family}:`, err);
       }
     }
   }
-  // Prime each loaded family at the exact size we'll render with, then await
-  // document.fonts.ready. Without this the very first ctx.fillText can still
-  // hit the monospace fallback even though the FontFace is registered.
+  // Prime each family at the exact size we'll render with, then await
+  // document.fonts.ready. Without this the first ctx.fillText can still hit
+  // the monospace fallback even when the FontFace is registered. Also verify
+  // with .check() and warn so devtools shows when a glyph load was missed.
   if (document.fonts && document.fonts.load) {
     await Promise.all(loaded.map((fam) =>
       document.fonts.load(`${fontPx}px "${fam}"`).catch(() => {})
     ));
     try { await document.fonts.ready; } catch { /* ignore */ }
+    if (typeof console !== 'undefined') {
+      for (const fam of loaded) {
+        if (!document.fonts.check(`${fontPx}px "${fam}"`)) {
+          console.warn(`[mandala] font "${fam}" still not ready at ${fontPx}px after load`);
+        }
+      }
+    }
   }
+  // Force a real DOM paint with both fonts at the target size. Canvas's font
+  // selection pipeline in some browsers (notably WebKit) doesn't fully pick
+  // up document.fonts entries until they've been used in actual layout —
+  // FontFace.load() + document.fonts.ready isn't enough on its own. Without
+  // this probe, ctx.fillText silently falls back to system monospace for the
+  // big block glyphs even though .check() reports the font as loaded.
+  if (loaded.length) probeFonts(loaded, fontPx);
   return loaded;
+}
+
+function probeFonts(families, fontPx) {
+  const probe = document.createElement('div');
+  probe.setAttribute('aria-hidden', 'true');
+  probe.style.cssText = 'position:absolute;left:-9999px;top:-9999px;visibility:hidden;pointer-events:none;';
+  // Render a sample of glyphs MathcastlesRemix-Regular and -Extra each need
+  // to shape: ASCII chars Regular handles, plus block-element chars Extra owns.
+  const sample = '0123456789.-^/▰▱░▒▓█▀▆▟▙';
+  for (const fam of families) {
+    const line = document.createElement('div');
+    line.style.cssText = `font-family:"${fam}",monospace;font-size:${fontPx}px;line-height:1;`;
+    line.textContent = sample;
+    probe.appendChild(line);
+  }
+  document.body.appendChild(probe);
+  // Force layout — getBoundingClientRect triggers font selection + glyph
+  // shaping for everything inside the probe.
+  probe.getBoundingClientRect();
+  document.body.removeChild(probe);
+}
+
+let _injectedStyleEl = null;
+const _injectedFamilies = new Set();
+function injectFontFaceStyle(faces) {
+  if (typeof document === 'undefined') return;
+  const toInject = faces.filter((f) => !_injectedFamilies.has(f.family));
+  if (!toInject.length) return;
+  if (!_injectedStyleEl || !_injectedStyleEl.isConnected) {
+    _injectedStyleEl = document.createElement('style');
+    _injectedStyleEl.setAttribute('data-mandala-fonts', '');
+    document.head.appendChild(_injectedStyleEl);
+  }
+  let css = _injectedStyleEl.textContent || '';
+  for (const f of toInject) {
+    // Mirror loadFonts: omit format hint to avoid the woff/woff2 mismatch
+    // that strict browsers use to skip src candidates.
+    css += `@font-face{font-family:'${f.family}';font-display:block;src:url(${f.dataUrl});}\n`;
+    _injectedFamilies.add(f.family);
+  }
+  _injectedStyleEl.textContent = css;
 }
 
 function parseKeyframes(html) {

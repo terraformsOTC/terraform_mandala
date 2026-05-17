@@ -6,10 +6,12 @@ import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import { prepareRenderer, renderFrame } from './canvasRenderer.js';
 
 export const DEFAULT_GIF_OPTS = {
-  // Match the on-chain iframe's outer box exactly so cell geometry and font
-  // size align with what the user sees in the preview.
-  width: 388,
-  height: 560,
+  // 2× the iframe's 388×560 outer box. renderFrame scales padding and font
+  // size from those reference dimensions, so cell geometry stays correct.
+  // Indexed-palette compression keeps file size sub-linear in pixel count for
+  // the Mandala's flat-color cells — usually ~2× the file size of 1× output.
+  width: 776,
+  height: 1120,
   fps: 12,
   durationSec: 5,
   // Simulated "page time" at frame 0. Offset into the animation so the GIF

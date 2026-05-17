@@ -107,9 +107,20 @@ export function extractAnimData(html) {
   // CHROMA is a static string constant (single or double quoted)
   const chroma = str(html.match(/CHROMA=['"]([^'"]+)['"]/));
 
-  // ZONE and BIOMECODE are string constants defined in the v2 renderer.
+  // ZONE is a string constant defined in the v2 renderer.
   const zone = str(html.match(/ZONE=['"]([^'"]+)['"]/));
-  const biomecode = str(html.match(/BIOMECODE=['"]([^'"]+)['"]/));
+
+  // BIOMECODE is a JS array literal of single-char strings in the v2 contract
+  // (e.g. let BIOMECODE=['0','.','.','-','^','.','/']). We concatenate the
+  // entries so callers see a single glyph-string for display purposes.
+  let biomecode = null;
+  const biomecodeArrMatch = html.match(/BIOMECODE\s*=\s*(\[[\s\S]*?\])/);
+  if (biomecodeArrMatch) {
+    try {
+      const arr = JSON.parse(biomecodeArrMatch[1].replace(/'/g, '"'));
+      if (Array.isArray(arr)) biomecode = arr.join('');
+    } catch { /* malformed — leave null */ }
+  }
 
   // Pre-v2 tokens (no Version trait) ship the legacy short renderer in their
   // tokenHTML; V=2.0 tokens ship the longer v2 renderer that defines

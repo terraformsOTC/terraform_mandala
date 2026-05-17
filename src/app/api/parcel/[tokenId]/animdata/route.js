@@ -11,6 +11,10 @@ export async function GET(_req, { params }) {
   try {
     if (isUnminted(tokenId)) {
       const data = await fetchUnmintedAnimData(tokenId);
+      // The patched unminted HTML carries the v2 template's bladeRailSequencer
+      // and our patched SEED/BIOME/BIOMECODE, so the same extractor that drives
+      // the minted path computes blade + biomecode correctly here too.
+      const meta = extractAnimData(data.html);
       return NextResponse.json({
         tokenId,
         status: 0,
@@ -19,7 +23,13 @@ export async function GET(_req, { params }) {
         chars: data.chars,
         colors: data.colors,
         direction: data.direction,
-        hasV2Renderer: false,
+        hasV2Renderer: true,
+        seed: data.traits?.seed ?? meta.seed,
+        biome: data.traits?.biome ?? meta.biome,
+        zone: data.traits?.zone ?? meta.zone,
+        chroma: data.traits?.chroma ?? meta.chroma,
+        biomecode: meta.biomecode,
+        blade: meta.blade,
         isUnminted: true,
         html: data.html,
       });
