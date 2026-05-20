@@ -133,7 +133,7 @@ function ParcelMeta({ animData }) {
       {animData.zone && (
         <div className="flex items-baseline gap-1.5">
           <span className="opacity-50 uppercase tracking-wider shrink-0">ZONE:</span>
-          <span className="opacity-80">[{animData.zone.toUpperCase()}]</span>
+          <span className="opacity-80">{animData.zone.toUpperCase()}</span>
         </div>
       )}
       {animData.biome != null && (
