@@ -12,7 +12,7 @@
 //   3. Return the patched HTML. ParcelPreview substitutes cells in as usual,
 //      and the embedded v2 JS runs terraLoop with MODE=1/ANTENNA=1.
 
-import { fetchV2TokenHTML } from './tokenHTML.js';
+import { fetchV0TokenHTML, fetchV2TokenHTML } from './tokenHTML.js';
 
 const ESTIMATOR_API_URL = process.env.ESTIMATOR_API_URL || 'https://terraform-estimator.onrender.com';
 const TOTAL_MINTED = 9911;
@@ -70,6 +70,15 @@ async function v2Template() {
   return _v2Template;
 }
 
+let _v0Template = null;
+let _v0TemplateExpiry = 0;
+async function v0Template() {
+  if (_v0Template && Date.now() < _v0TemplateExpiry) return _v0Template;
+  _v0Template = await fetchV0TokenHTML(V2_TEMPLATE_TOKEN_ID);
+  _v0TemplateExpiry = Date.now() + V2_TEMPLATE_TTL_MS;
+  return _v0Template;
+}
+
 export function isUnminted(tokenId) {
   return tokenId > TOTAL_MINTED && tokenId <= 11104;
 }
@@ -78,19 +87,21 @@ export function unmintedIdFor(tokenId) {
   return tokenId - TOTAL_MINTED;
 }
 
-export async function fetchUnmintedAnimData(tokenId) {
+export async function fetchUnmintedAnimData(tokenId, { renderer = 'v2' } = {}) {
   const id = unmintedIdFor(tokenId);
-  const key = String(tokenId);
+  const key = `${renderer}:${tokenId}`;
   const hit = cacheGet(key);
   if (hit) return hit;
 
   const [estimator, template] = await Promise.all([
     fetchEstimator(id),
-    v2Template(),
+    renderer === 'v0' ? v0Template() : v2Template(),
   ]);
   if (!estimator?.animData) throw new Error('no animation data for this unminted parcel');
 
-  const html = patchV2Template(template, estimator);
+  const html = renderer === 'v0'
+    ? patchV0Template(template, estimator)
+    : patchV2Template(template, estimator);
 
   const palette = {};
   for (const [k, v] of Object.entries(estimator.animData.colors || {})) {
@@ -244,6 +255,84 @@ function patchV2Template(template, est) {
   // biome-specific font for each unminted parcel that shapes the BIOMECODE
   // chars to full-cell — without this swap, biomes whose chars the contract
   // font doesn't shape fall back to monospace and render at half-cell size.
+  if (typeof anim.fontData === 'string'
+      && anim.fontData.length > 0
+      && anim.fontData.length <= MAX_FONT_BYTES
+      && SAFE_BASE64.test(anim.fontData)) {
+    out = out.replace(
+      /(@font-face\s*\{font-family:'MathcastlesRemix-Regular';[^}]*src:url\()data:application\/font-woff2;charset=utf-8;base64,[A-Za-z0-9+/=]+(\))/,
+      `$1data:application/font-woff2;charset=utf-8;base64,${anim.fontData}$2`,
+    );
+  }
+
+  return out;
+}
+
+// V0 analog of patchV2Template. V0's script has far fewer constants (no BIOME,
+// ZONE, CHROMA, BIOMECODE, ANTENNA), and it reads per-class chars straight from
+// the DOM at runtime — so all we have to patch on the static side is the class
+// color rules, the .r background, the keyframe palette cycle, and SEED. Char
+// content is injected later by ParcelPreview.buildPreviewHtml using
+// animData.chars (Estimator-provided), exactly like the v2 path.
+function patchV0Template(template, est) {
+  const anim = est.animData || {};
+  const traits = est.traits || {};
+  const colors = anim.colors || {};
+
+  const safeColors = {};
+  for (const cls of 'abcdefghij') {
+    const c = safeColor(colors[cls], null);
+    if (c) safeColors[cls] = c;
+  }
+  const bg = safeColor(colors.bg, safeColors.j || safeColors.a || '#000');
+  const trSeed = safeUint(traits.seed, 0, 99999, 0);
+  const trBiome = safeUint(traits.biome, 0, 255, 0);
+
+  let out = template;
+
+  // 1. Class color rules.
+  for (const cls of 'abcdefghij') {
+    if (!safeColors[cls]) continue;
+    out = out.replace(
+      new RegExp(`\\.${cls}\\{color:#[0-9a-fA-F]+;?\\}`),
+      `.${cls}{color:${safeColors[cls]};}`,
+    );
+  }
+
+  // 2. Background (preserve the rest of the .r rule).
+  out = out.replace(
+    /(\.r\{[^}]*?background-color:)#[0-9a-fA-F]+/,
+    `$1${bg}`,
+  );
+
+  // 2b. Patch .r font-size to the biome's preferred value (same table v2
+  // unminted uses). The v0 template ships 12px because v0's built-in font
+  // was designed at 12px, but we're swapping in the Estimator's
+  // biome-specific MathcastlesRemix-Regular font whose glyphs are designed
+  // at the biome's v2 font-size (14–27px). At 12px those biome-baked block
+  // glyphs render at half their intended size — same "glyphs too small"
+  // symptom we fixed on v2 unminted. See [[project-v2-biome-fontsize]] for
+  // table provenance.
+  const biomeFs = BIOME_FONT_SIZE[trBiome] ?? BIOME_FONT_SIZE_DEFAULT;
+  out = out.replace(
+    /(\.r\{[^}]*?font-size:)\d+px/,
+    `$1${biomeFs}px`,
+  );
+
+  // 3. Keyframe palette cycle — same shape as v2 (10 stops a..j).
+  const stops = 'abcdefghij'.split('').map((cls, i) => {
+    const c = safeColors[cls] || bg;
+    return `${i * 10}%{color:${c};}`;
+  }).join('');
+  out = out.replace(/@keyframes x\{[^@<]*?\}\s*\}/, `@keyframes x{${stops}}`);
+
+  // 4. SEED — drives v0's charSet append-uni branches and speedFac.
+  out = out.replace(/const\s+SEED\s*=\s*\d+/, `const SEED=${trSeed}`);
+
+  // 5. Font swap — v0's @font-face declaration has the same shape as v2's,
+  // so the same regex picks it up. Without this, the biome-specific chars
+  // the Estimator returns won't be glyph-shaped by the v0 contract's
+  // general-purpose embedded font.
   if (typeof anim.fontData === 'string'
       && anim.fontData.length > 0
       && anim.fontData.length <= MAX_FONT_BYTES

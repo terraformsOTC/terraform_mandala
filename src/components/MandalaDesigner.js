@@ -14,7 +14,13 @@ import { randomSeed } from '@/lib/seedrandom';
 // (□) in the meta panel.
 const META_GLYPH_FONT = `'MathcastlesRemix-Regular', 'MathcastlesRemix-Extra', monospace`;
 
-export default function MandalaDesigner({ animData, params, onParamsChange }) {
+export default function MandalaDesigner({
+  animData,
+  params,
+  onParamsChange,
+  renderer,
+  onRendererChange,
+}) {
   const generated = useMemo(() => {
     try {
       return generateMandala(params);
@@ -34,7 +40,14 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
   }, [animData?.html]);
 
   return (
-    <div className="grid gap-8 mt-2" style={{ gridTemplateColumns: 'minmax(320px, 640px) 1fr' }}>
+    <div
+      className="grid gap-8 mt-2"
+      // Left column is fixed at its compact width so the right column's content
+      // (a long BLADE row in particular) can't push the grid around when the
+      // selected parcel changes. The right column uses minmax(0, 1fr) so the
+      // blade truncates via overflow-hidden instead of forcing the grid wider.
+      style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}
+    >
       <div className="flex flex-col gap-4">
         <h2 className="text-lg opacity-90">[animation controls]</h2>
         <MandalaControls params={params} onChange={onParamsChange} />
@@ -48,10 +61,12 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
       <div className="flex flex-col gap-3 items-start">
         <h2 className="text-lg opacity-90">[preview — #{animData?.tokenId}]</h2>
         <p className="text-xs opacity-50">
-          These previews are generated using the parcel&rsquo;s onchain zone, biome, and chroma
-          traits with the v2 contracts and antenna on as presets, regardless of the onchain
-          settings the parcel uses. This means your parcel may look different here.
+          Previews force daydream mode regardless of the parcel&rsquo;s onchain status. Toggle between
+          the canonical v0 renderer and the v2 renderer below &mdash; this is a preview-only switch
+          and does not change the parcel&rsquo;s on-chain renderer index.
         </p>
+
+        <RendererToggle renderer={renderer} onChange={onRendererChange} />
 
         {animData && <ParcelMeta animData={animData} />}
 
@@ -64,6 +79,36 @@ export default function MandalaDesigner({ animData, params, onParamsChange }) {
           heightmap={generated.heightmap}
           tokenId={animData?.tokenId}
         />
+      </div>
+    </div>
+  );
+}
+
+function RendererToggle({ renderer, onChange }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs opacity-50 uppercase tracking-wider">renderer:</span>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="btn-primary btn-sm text-xs"
+          style={{ opacity: renderer === 'v0' ? 1 : 0.5 }}
+          disabled={renderer === 'v0'}
+          onClick={() => onChange?.('v0')}
+          title="canonical / legacy on-chain renderer"
+        >
+          v0
+        </button>
+        <button
+          type="button"
+          className="btn-primary btn-sm text-xs"
+          style={{ opacity: renderer === 'v2' ? 1 : 0.5 }}
+          disabled={renderer === 'v2'}
+          onClick={() => onChange?.('v2')}
+          title="current v2 daydream renderer"
+        >
+          v2
+        </button>
       </div>
     </div>
   );

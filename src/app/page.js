@@ -11,8 +11,13 @@ import { DEFAULTS, TEMPLE_STYLES } from '@/lib/mandala';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'terraces', 'style',
+  'algo', 'rings', 'terraces', 'style', 'renderer',
 ];
+
+const DEFAULT_RENDERER = 'v2';
+function rendererFromUrl(searchParams) {
+  return searchParams?.get('renderer') === 'v0' ? 'v0' : 'v2';
+}
 
 export default function Home() {
   return (
@@ -43,6 +48,7 @@ function HomeInner() {
   const [animLoading, setAnimLoading] = useState(false);
 
   const [params, setParams] = useState(() => paramsFromUrl(searchParams) || defaultParams());
+  const [renderer, setRenderer] = useState(() => rendererFromUrl(searchParams));
 
   const walletRef = useRef(walletAddress);
   useEffect(() => { walletRef.current = walletAddress; }, [walletAddress]);
@@ -139,7 +145,7 @@ function HomeInner() {
     let cancelled = false;
     setAnimLoading(true);
     setError(null);
-    fetch(`/api/parcel/${selectedTokenId}/animdata`)
+    fetch(`/api/parcel/${selectedTokenId}/animdata?renderer=${renderer}`)
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
       .then(({ ok, j }) => {
         if (cancelled) return;
@@ -155,7 +161,7 @@ function HomeInner() {
     return () => {
       cancelled = true;
     };
-  }, [selectedTokenId]);
+  }, [selectedTokenId, renderer]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -173,10 +179,11 @@ function HomeInner() {
     if (params.ringCount !== DEFAULTS.ringCount) next.set('rings', String(params.ringCount));
     if (params.terraceCount !== DEFAULTS.terraceCount) next.set('terraces', String(params.terraceCount));
     if (params.templeStyle !== DEFAULTS.templeStyle) next.set('style', params.templeStyle);
+    if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
     const qs = next.toString();
     const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
     window.history.replaceState(null, '', url);
-  }, [params, selectedTokenId]);
+  }, [params, selectedTokenId, renderer]);
 
   return (
     <div className="content-wrapper">
@@ -257,6 +264,8 @@ function HomeInner() {
                 animData={animData}
                 params={params}
                 onParamsChange={setParams}
+                renderer={renderer}
+                onRendererChange={setRenderer}
               />
             )}
           </section>

@@ -36,11 +36,10 @@ export default function ParcelPreview({ animData, heightmap, width = 388, height
   );
 }
 
-// Always renders the v2 daydream animation with antenna ON, regardless of the
-// parcel's on-chain status or renderer version. MODE is forced to 1 (daydream)
-// and ANTENNA is forced to 1 for all parcels. V0-renderer parcels (no MODE/ANTENNA
-// variables in their script) will play their CSS animation as-is — v0 support
-// will be wired in a subsequent pass.
+// Renders whichever HTML the API returned (v0 or v2 — chosen via ?renderer=v0|v2).
+// MODE is forced to 1 (daydream); ANTENNA is forced to 1 where present. The
+// ANTENNA replace is a no-op on v0 HTML (v0 has no ANTENNA var) which is fine —
+// v0's daydream animation runs unconditionally.
 function buildPreviewHtml(animData, heightmap) {
   const { html, chars } = animData;
   const cells = new Array(1024);

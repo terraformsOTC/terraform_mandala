@@ -1,4 +1,4 @@
-import { getContract, getV2RendererContract } from './contract.js';
+import { getContract, getV2RendererContract, getV0RendererContract } from './contract.js';
 
 // Global seed is a contract constant after reveal — cache indefinitely.
 let _globalSeed = null;
@@ -32,6 +32,35 @@ export async function fetchV2TokenHTML(tokenId) {
     seed,
     0,         // yearsOfDecay: permanently 0
     [],        // canvasData: empty (no committed heightmap)
+  );
+  cacheSet(key, html);
+  return html;
+}
+
+// Fetch the v0 (canonical / legacy) renderer's HTML for any token regardless of
+// its on-chain renderer index. Both renderers share the same tokenHTML signature.
+//
+// Subtle: we ask for status=0 (Terrain), not status=1 (Daydream), even though we
+// ultimately want the daydream animation. Reason: v0's daydream HTML emits all
+// 1024 cells as class 'a' (it expects a committed canvas via canvasData; empty
+// canvas → flat terrain). With class 'a' only, the v0 script's DOM-derived
+// `originalChars` build collapses charSet to a single glyph, so cell injection
+// in ParcelPreview ends up with no chars for classes b–i. Status=0 instead
+// emits cells with the parcel's natural heightmap distribution (a–i populated),
+// which gives us the full chars dict. The palette / keyframes / bg / fonts are
+// identical between status=0 and status=1, and ParcelPreview already forces
+// MODE=1 in the script, so daydream animation still runs.
+export async function fetchV0TokenHTML(tokenId) {
+  const key = `v0:${tokenId}`;
+  const hit = cacheGet(key);
+  if (hit) return hit;
+  const [seed, placement] = await Promise.all([globalSeed(), tokenPlacement(tokenId)]);
+  const html = await getV0RendererContract().tokenHTML(
+    0,         // status: Terrain — see comment above for why not Daydream
+    placement,
+    seed,
+    0,         // yearsOfDecay: permanently 0
+    [],        // canvasData: empty
   );
   cacheSet(key, html);
   return html;

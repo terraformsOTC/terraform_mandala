@@ -7,6 +7,11 @@ export const TERRAFORMS_ADDRESS = '0x4E1f41613c9084FdB9E34E11fAE9412427480e56';
 // Address confirmed by reading tokenURIAddresses(2) from the main contract.
 export const V2_RENDERER_ADDRESS = '0x8aF860C8F157F4E3B6A54913BFA6Bb96ab2605C2';
 
+// v0 (canonical / legacy) renderer contract. Address from tokenURIAddresses(0)
+// — verified via scripts/discover-v0.mjs. Shares the same tokenHTML(status,
+// placement, seed, yearsOfDecay, canvasData) ABI as v2.
+export const V0_RENDERER_ADDRESS = '0xA5aFC9fE76a28fB12C60954Ed6e2e5f8ceF64Ff2';
+
 export const ABI = [
   'function tokenURI(uint256) view returns (string)',
   'function tokenHTML(uint256) view returns (string)',
@@ -20,7 +25,9 @@ export const ABI = [
   'function commitDreamToCanvas(uint256 tokenId, uint256[16] dream)',
 ];
 
-const V2_RENDERER_ABI = [
+// Both v0 and v2 renderers expose the same tokenHTML signature, so we share
+// one ABI fragment between them.
+const RENDERER_ABI = [
   'function tokenHTML(uint256 status, uint256 placement, uint256 seed, uint256 yearsOfDecay, uint256[] calldata canvasData) view returns (string)',
 ];
 
@@ -57,5 +64,9 @@ export function getContract() {
 }
 
 export function getV2RendererContract() {
-  return new Contract(V2_RENDERER_ADDRESS, V2_RENDERER_ABI, getProvider());
+  return new Contract(V2_RENDERER_ADDRESS, RENDERER_ABI, getProvider());
+}
+
+export function getV0RendererContract() {
+  return new Contract(V0_RENDERER_ADDRESS, RENDERER_ABI, getProvider());
 }

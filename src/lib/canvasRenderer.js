@@ -226,6 +226,17 @@ function parseBgColor(html) {
   return m ? m[1] : '#000';
 }
 
+// V0 doesn't expose BIOMECODE — it builds charSet from the DOM-rendered
+// .a–.i cell content at runtime. Parse those characters straight from the
+// HTML so we can mirror the same construction here.
+function parseChars(html) {
+  const chars = {};
+  for (const m of html.matchAll(/<p class='([a-j])'>([^<]*)<\/p>/g)) {
+    if (chars[m[1]] === undefined) chars[m[1]] = m[2];
+  }
+  return chars;
+}
+
 function decodeScriptText(html) {
   // The <script> contents are HTML-encoded in the on-chain output.
   const m = html.match(/<script[^>]*>([\s\S]*?)<\/script>/);
@@ -263,7 +274,40 @@ function parseScriptConstants(scriptText) {
   // bladeRailSequencer = [...]
   const blMatch = scriptText.match(/bladeRailSequencer\s*=\s*(\[[\s\S]*?\]);/);
   constants.bladeRailSequencer = blMatch ? JSON.parse(blMatch[1]) : [];
+  // BIOMECODE is v2-only — its presence is the version tell.
+  constants.version = scriptText.includes('BIOMECODE') ? 'v2' : 'v0';
   return constants;
+}
+
+// Reproduce the v0 contract's runtime `charSet` / `mainSet` construction for
+// the daydream branch (MODE=1). V0 builds charSet from the DOM `.a`..`.i`
+// cell content (passed in as `chars`), then optionally appends unicode-block
+// 10-char sets based on SEED ranges. We treat MODE=1 since the preview path
+// forces daydream.
+const V0_UNI = [
+  9600, 9610, 9620, 3900, 9812, 9120, 9590, 143345, 48, 143672, 143682, 143692, 143702,
+  820, 8210, 8680, 9573, 142080, 142085, 142990, 143010, 143030, 9580, 9540, 1470,
+  143762, 143790, 143810,
+];
+function v0MakeSet(start) {
+  const out = [];
+  for (let i = 0; i < 10; i++) out.push(String.fromCharCode(start + i));
+  return out;
+}
+function buildCharSetsV0(c, chars) {
+  // V0 iterates classIds in the order ['i','h','g','f','e','d','c','b','a']
+  // and pushes each cell's textContent into originalChars. Mirror that order.
+  const order = ['i', 'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
+  const originalChars = order.map((cls) => chars[cls] ?? ' ');
+  let charSet = [...originalChars];
+  const SEED = c.SEED || 0;
+  if (SEED > 9970) {
+    for (const u of V0_UNI) charSet = charSet.concat(v0MakeSet(u));
+  } else if (SEED > 5000) {
+    charSet = charSet.concat(v0MakeSet(V0_UNI[Math.floor(SEED) % 3]));
+  }
+  const mainSet = SEED > 9950 ? charSet : originalChars.slice().reverse();
+  return { charSet, mainSet, drive: 0, coreCharsetLength: originalChars.length };
 }
 
 // Reproduce the on-chain `charSet` / `mainSet` construction. We treat MODE=1
@@ -311,7 +355,9 @@ export async function prepareRenderer(html, opts = {}) {
   const animClasses = parseClassAnimations(html);
   const staticColors = parseStaticColors(html);
   const bg = parseBgColor(html);
-  const { charSet, mainSet, drive, coreCharsetLength } = buildCharSets(constants);
+  const { charSet, mainSet, drive, coreCharsetLength } = constants.version === 'v0'
+    ? buildCharSetsV0(constants, parseChars(html))
+    : buildCharSets(constants);
 
   // Mirror the on-chain runtime timing-function patch: CHROMA="Flow" + certain
   // zones flip linear → steps(1). For #1627 (ZONE=Dhampir) the timing stays linear.
@@ -436,6 +482,9 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
   const charSetLen = state.charSet.length;
   const mainSetLen = state.mainSet.length;
   const SEED = state.constants.SEED || 0;
+  const isV0 = state.constants.version === 'v0';
+  const v0SpeedFac = isV0 && SEED > 6500 ? 30 : 1;
+  const v0HighSeedH0 = isV0 && SEED >= 8000;
 
   // Cache per-class color and per-height character so we don't recompute them 1024×.
   const classColors = {};
@@ -443,11 +492,15 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
     if (classColors[cls] == null) classColors[cls] = colorAtTime(cls, timeMs, state);
   }
   classColors.j = state.staticColors.j || state.bg || '#000';
+  // Per-height char precompute is only sound for v2 (depends on h + time only).
+  // V0's per-cell index depends on row, so it's computed inline below.
   const heightChars = new Array(10);
-  for (let h = 1; h < 10; h++) {
-    let idx = Math.floor(airship * 0.15 - h) % charSetLen;
-    if (idx < 0) idx += charSetLen;
-    heightChars[h] = decodeEntity(state.charSet[idx] ?? ' ');
+  if (!isV0) {
+    for (let h = 1; h < 10; h++) {
+      let idx = Math.floor(airship * 0.15 - h) % charSetLen;
+      if (idx < 0) idx += charSetLen;
+      heightChars[h] = decodeEntity(state.charSet[idx] ?? ' ');
+    }
   }
 
   for (let r = 0; r < 32; r++) {
@@ -457,8 +510,22 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
       const cls = HEIGHT_TO_CLASS[h] || 'a';
       const color = classColors[cls] || '#fff';
       let ch;
-      if (h === 0) {
-        // ANTENNA>0 path: per-cell m1 depends on position + airship.
+      if (isV0) {
+        // V0 daydream branch — mirrors the on-chain script's setInterval body.
+        if (h === 0) {
+          const idxRaw = v0HighSeedH0
+            ? Math.floor(airship / 2 + 0.05 * r)
+            : Math.floor(airship / 1000 + 0.05 * r + 0.005 * c);
+          const len = Math.max(1, mainSetLen);
+          const idx = ((idxRaw % len) + len) % len;
+          ch = decodeEntity(state.mainSet[idx] ?? ' ');
+        } else {
+          const len = Math.max(1, charSetLen);
+          const idx = ((Math.floor(airship / v0SpeedFac + r + h) % len) + len) % len;
+          ch = decodeEntity(state.charSet[idx] ?? ' ');
+        }
+      } else if (h === 0) {
+        // V2 ANTENNA>0 path: per-cell m1 depends on position + airship.
         const m1 = Math.hypot(r - c, c - 15.5) + airship * 0.05 * SEED * 0.00045;
         const idx = Math.abs(Math.floor(m1)) % Math.max(1, mainSetLen);
         ch = decodeEntity(state.mainSet[idx] ?? ' ');
