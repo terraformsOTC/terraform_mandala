@@ -89,16 +89,6 @@ function cacheSet(key, value) {
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
 }
 
-export async function fetchTokenHTML(tokenId) {
-  const key = String(tokenId);
-  const hit = cacheGet(key);
-  if (hit) return hit;
-  const c = getContract();
-  const html = await c.tokenHTML(tokenId);
-  cacheSet(key, html);
-  return html;
-}
-
 // Extract the rendering palette from raw on-chain HTML.
 //   colors: { a: '#xxxxxx', ..., j: '#...' }
 //   chars:  { a: '𓁹', b: '.', ..., j: '&#160;' }   (raw HTML entities preserved)

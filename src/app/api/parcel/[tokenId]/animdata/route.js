@@ -4,7 +4,8 @@ import { getContract } from '@/lib/contract';
 import { isUnminted, fetchUnmintedAnimData } from '@/lib/unminted';
 
 export async function GET(req, { params }) {
-  const tokenId = Number(params.tokenId);
+  const { tokenId: rawTokenId } = await params;
+  const tokenId = Number(rawTokenId);
   if (!Number.isInteger(tokenId) || tokenId < 1 || tokenId > 11104) {
     return NextResponse.json({ error: 'invalid tokenId' }, { status: 400 });
   }

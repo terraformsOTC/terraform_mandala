@@ -4,7 +4,7 @@ import { getContract, statusLabel } from '@/lib/contract';
 const MAX_PARCELS = 200;
 
 export async function GET(_req, { params }) {
-  const { address } = params;
+  const { address } = await params;
   if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
     return NextResponse.json({ error: 'invalid address' }, { status: 400 });
   }

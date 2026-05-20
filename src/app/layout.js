@@ -92,8 +92,12 @@ export default function RootLayout({ children }) {
       <head>
         <script
           type="application/ld+json"
+          // Escape `<` so a future JSON_LD value containing "</script>" can't
+          // terminate the inline script tag. < is the JSON-safe form of `<`.
           // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(JSON_LD).replace(/</g, '\\u003c'),
+          }}
         />
       </head>
       <body>{children}</body>

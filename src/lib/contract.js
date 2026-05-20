@@ -12,7 +12,7 @@ export const V2_RENDERER_ADDRESS = '0x8aF860C8F157F4E3B6A54913BFA6Bb96ab2605C2';
 // placement, seed, yearsOfDecay, canvasData) ABI as v2.
 export const V0_RENDERER_ADDRESS = '0xA5aFC9fE76a28fB12C60954Ed6e2e5f8ceF64Ff2';
 
-export const ABI = [
+const ABI = [
   'function tokenURI(uint256) view returns (string)',
   'function tokenHTML(uint256) view returns (string)',
   'function tokenToStatus(uint256) view returns (uint8)',
@@ -21,8 +21,6 @@ export const ABI = [
   'function balanceOf(address) view returns (uint256)',
   'function tokenOfOwnerByIndex(address, uint256) view returns (uint256)',
   'function ownerOf(uint256) view returns (address)',
-  'function enterDream(uint256 tokenId)',
-  'function commitDreamToCanvas(uint256 tokenId, uint256[16] dream)',
 ];
 
 // Both v0 and v2 renderers expose the same tokenHTML signature, so we share
@@ -30,8 +28,6 @@ export const ABI = [
 const RENDERER_ABI = [
   'function tokenHTML(uint256 status, uint256 placement, uint256 seed, uint256 yearsOfDecay, uint256[] calldata canvasData) view returns (string)',
 ];
-
-export const MAINNET_CHAIN_ID = 1n;
 
 // Mapping confirmed against on-chain observation:
 //  - tokens 7173, 9686 (status 0) display as Terrain on terraforms.xyz
