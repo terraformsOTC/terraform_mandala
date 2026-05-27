@@ -21,22 +21,32 @@ export const DEFAULT_GIF_OPTS = {
   startTimeMs: 8000,
 };
 
+// Twitter's GIF upload limit. Exceeded GIFs are auto-shrunk by reducing
+// canvas resolution (duration/fps are never touched).
+const TWITTER_MAX_BYTES = 15 * 1024 * 1024;
+
+// Auto-shrink floor: 1× the iframe reference dimensions.
+// Going below this makes the export worse quality than the live preview.
+const MIN_GIF_WIDTH = 388;
+
 function tick() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-export async function exportGif({ animData, heightmap, tokenId, options, onProgress }) {
-  const opts = { ...DEFAULT_GIF_OPTS, ...(options || {}) };
-  const { width, height, fps, durationSec, startTimeMs } = opts;
+// Encode one pass at the given canvas dimensions. `state` is dimension-
+// independent (fonts + parsed animation data) and is reused across retries.
+async function encodeGifBlob({
+  state,
+  heightmap,
+  width,
+  height,
+  fps,
+  durationSec,
+  startTimeMs,
+  onProgress,
+}) {
   const totalFrames = Math.max(2, Math.round(fps * durationSec));
   const delay = Math.round(1000 / fps);
-
-  // Compute the exact font size renderFrame will use so we prime FontFace at
-  // the right (family, size) tuple — otherwise the very first frame can still
-  // render with monospace fallback while the browser loads the right size.
-  const cellH = (height - 2 * (24 * (height / 560))) / 32;
-  const renderFontPx = Math.max(6, Math.round(cellH * (14 / 16)));
-  const state = await prepareRenderer(animData?.html, { primeFontPx: renderFontPx });
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -73,6 +83,83 @@ export async function exportGif({ animData, heightmap, tokenId, options, onProgr
 
   gif.finish();
   return new Blob([gif.bytes()], { type: 'image/gif' });
+}
+
+/**
+ * Export the parcel animation as a GIF, auto-shrinking canvas resolution if
+ * the first encode exceeds the Twitter 15 MB limit.
+ *
+ * Duration and fps are never altered — only pixel dimensions are reduced.
+ * Up to 3 encode attempts are made; if the floor (1× reference size) is
+ * reached before hitting the limit the best result is returned anyway.
+ *
+ * Returns { blob, width, height, reducedResolution }.
+ * `reducedResolution` is true whenever a retry was needed.
+ *
+ * Callbacks:
+ *   onProgress(0..1)  — called each frame during encoding (resets to 0 on retry)
+ *   onRetry({ attempt, width, height, prevSizeKb })  — called before each retry
+ */
+export async function exportGif({
+  animData,
+  heightmap,
+  tokenId,
+  options,
+  onProgress,
+  onRetry,
+}) {
+  const opts = { ...DEFAULT_GIF_OPTS, ...(options || {}) };
+  const { fps, durationSec, startTimeMs } = opts;
+  const maxBytes = opts.maxBytes ?? TWITTER_MAX_BYTES;
+
+  let width = opts.width;
+  let height = opts.height;
+
+  // Compute the exact font size renderFrame will use so we prime FontFace at
+  // the right (family, size) tuple — otherwise the very first frame can still
+  // render with monospace fallback while the browser loads the right size.
+  // Fonts are re-used as-is for smaller retry passes; document.fonts caches
+  // them regardless of the px size requested after the initial load.
+  const cellH = (height - 2 * (24 * (height / 560))) / 32;
+  const renderFontPx = Math.max(6, Math.round(cellH * (14 / 16)));
+  const state = await prepareRenderer(animData?.html, { primeFontPx: renderFontPx });
+
+  const MAX_ATTEMPTS = 3;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const blob = await encodeGifBlob({
+      state,
+      heightmap,
+      width,
+      height,
+      fps,
+      durationSec,
+      startTimeMs,
+      onProgress,
+    });
+
+    const withinLimit = blob.size <= maxBytes;
+    const atFloor = width <= MIN_GIF_WIDTH;
+
+    if (withinLimit || atFloor || attempt === MAX_ATTEMPTS) {
+      return { blob, width, height, reducedResolution: attempt > 1 };
+    }
+
+    // Over limit — derive the new scale factor.
+    //
+    // Pixel count scales as width × height, so halving pixels halves raw data
+    // (GIF LZW compression varies, but the correlation is tight for these
+    // flat-color frames). sqrt converts the area ratio to a linear scale.
+    // The 0.93 margin absorbs rounding and compression variance so we don't
+    // land just over the limit again after resizing.
+    const scale = Math.sqrt(maxBytes / blob.size) * 0.93;
+    width = Math.max(MIN_GIF_WIDTH, Math.round((width * scale) / 2) * 2); // snap to even px
+    // Preserve the original target aspect ratio (not accumulated per-retry).
+    height = Math.round((opts.height / opts.width) * width);
+    height = Math.round(height / 2) * 2; // snap to even px
+
+    if (onRetry) onRetry({ attempt, width, height, prevSizeKb: Math.round(blob.size / 1024) });
+  }
 }
 
 export function downloadBlob(blob, filename) {
