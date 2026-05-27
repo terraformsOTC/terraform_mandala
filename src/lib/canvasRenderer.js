@@ -19,7 +19,7 @@
 // both fonts via the FontFace API. `renderFrame(ctx, state, heightmap, t)`
 // paints one frame at simulated page-time `t` (ms since "page load").
 
-const HEIGHT_TO_CLASS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'i'];
+const HEIGHT_TO_CLASS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
 
 // HTML entity decoder for the chars dict (handles &#160; and &#xNN;).
 function decodeEntity(raw) {
