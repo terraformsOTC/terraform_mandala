@@ -7,7 +7,6 @@ export default function ExportGifButton({ animData, heightmap, tokenId }) {
   const [phase, setPhase] = useState('idle');
   const [progress, setProgress] = useState(0);
   const [sizeKb, setSizeKb] = useState(null);
-  const [reducedRes, setReducedRes] = useState(null); // e.g. "572×826" when auto-shrunk
   const [error, setError] = useState(null);
 
   const onClick = async () => {
@@ -15,7 +14,6 @@ export default function ExportGifButton({ animData, heightmap, tokenId }) {
     setPhase('encoding');
     setProgress(0);
     setSizeKb(null);
-    setReducedRes(null);
     setError(null);
     try {
       const result = await exportGif({
@@ -29,9 +27,8 @@ export default function ExportGifButton({ animData, heightmap, tokenId }) {
           setProgress(0);
         },
       });
-      const { blob, width, height, reducedResolution } = result;
+      const { blob } = result;
       setSizeKb(Math.round(blob.size / 1024));
-      if (reducedResolution) setReducedRes(`${width}×${height}`);
       downloadBlob(blob, `mandala-${tokenId || 'preview'}.gif`);
       setPhase('done');
     } catch (err) {
@@ -48,9 +45,7 @@ export default function ExportGifButton({ animData, heightmap, tokenId }) {
   } else if (phase === 'retrying') {
     label = `[reducing size — re-encoding ${Math.round(progress * 100)}%…]`;
   } else if (phase === 'done') {
-    const sizeStr = sizeKb != null ? `${sizeKb}kb` : '';
-    const resStr = reducedRes ? ` @ ${reducedRes}` : '';
-    label = `[export gif — last: ${sizeStr}${resStr}]`;
+    label = `[export gif — last: ${sizeKb != null ? `${sizeKb}kb` : ''}]`;
   } else {
     label = '[export gif]';
   }
@@ -65,11 +60,6 @@ export default function ExportGifButton({ animData, heightmap, tokenId }) {
       >
         {label}
       </button>
-      {reducedRes && phase === 'done' && (
-        <p className="text-xs" style={{ color: '#94a3b8' }}>
-          auto-reduced to {reducedRes} for Twitter (&lt;15 MB)
-        </p>
-      )}
       {error && (
         <p className="text-xs" style={{ color: '#f87171' }}>{error}</p>
       )}
