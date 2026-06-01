@@ -7,6 +7,7 @@ import HeightmapInspector from './HeightmapInspector';
 import ParcelPreview from './ParcelPreview';
 import ExportGifButton from './ExportGifButton';
 import { randomSeed } from '@/lib/seedrandom';
+import { originGlyphSet } from '@/lib/originGlyphs';
 
 // On-chain font shapes the BIOMECODE/BLADE glyphs into full-cell decorative
 // forms. Without it, biomes whose BIOMECODE chars sit in obscure Unicode
@@ -60,11 +61,6 @@ export default function MandalaDesigner({
       </div>
       <div className="flex flex-col gap-3 items-start">
         <h2 className="text-lg opacity-90">[preview — #{animData?.tokenId}]</h2>
-        <p className="text-xs opacity-50">
-          Previews force daydream mode regardless of the parcel&rsquo;s onchain status. Toggle between
-          the canonical v0 renderer and the v2 renderer below &mdash; this is a preview-only switch
-          and does not change the parcel&rsquo;s on-chain renderer index.
-        </p>
 
         <RendererToggle renderer={renderer} onChange={onRendererChange} />
 
@@ -117,6 +113,10 @@ function RendererToggle({ renderer, onChange }) {
 function ParcelMeta({ animData }) {
   if (!animData) return null;
 
+  // Origin parcels (status 3) animate a seed-derived glyph set in place of the
+  // blade — show it as the origin analog of the BLADE row.
+  const originGlyphs = animData.status === 3 ? originGlyphSet(animData.seed) : null;
+
   return (
     <div className="flex flex-col gap-0.5 w-full text-xs" style={{ fontFamily: 'monospace' }}>
       {animData.blade && (
@@ -127,6 +127,17 @@ function ParcelMeta({ animData }) {
             style={{ fontFamily: META_GLYPH_FONT }}
           >
             {animData.blade}
+          </span>
+        </div>
+      )}
+      {originGlyphs && (
+        <div className="flex items-baseline gap-1.5 w-full overflow-hidden">
+          <span className="opacity-50 uppercase tracking-wider shrink-0">GLYPHS:</span>
+          <span
+            className="opacity-80 whitespace-nowrap overflow-hidden"
+            style={{ fontFamily: META_GLYPH_FONT }}
+          >
+            {originGlyphs}
           </span>
         </div>
       )}
@@ -160,6 +171,16 @@ function ParcelMeta({ animData }) {
           <span className="opacity-50 uppercase tracking-wider shrink-0">CHROMA:</span>
           <span className="opacity-80">{animData.chroma}</span>
         </div>
+      )}
+      {/* Origin parcels (status 3) swap the blade out for a seed-derived glyph
+          set in their daydream/terraform animation, so the BLADE row above is
+          real parcel metadata but never appears in the preview. Call it out. */}
+      {animData.status === 3 && (
+        <p className="opacity-50 italic mt-1 w-full">
+          please note that for origin daydream and origin terraform parcels, the blade
+          characters do not appear and are replaced with a seed-derived custom glyph
+          set for the animation.
+        </p>
       )}
     </div>
   );

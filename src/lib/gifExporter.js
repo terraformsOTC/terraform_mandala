@@ -122,7 +122,12 @@ export async function exportGif({
   // them regardless of the px size requested after the initial load.
   const cellH = (height - 2 * (24 * (height / 560))) / 32;
   const renderFontPx = Math.max(6, Math.round(cellH * (14 / 16)));
-  const state = await prepareRenderer(animData?.html, { primeFontPx: renderFontPx });
+  // status 3 = Origin: triggers the extra origin glyph set in the renderer so
+  // the GIF matches the live preview (which forces MODE=3 for origin parcels).
+  const state = await prepareRenderer(animData?.html, {
+    primeFontPx: renderFontPx,
+    isOrigin: animData?.status === 3,
+  });
 
   const MAX_ATTEMPTS = 3;
 

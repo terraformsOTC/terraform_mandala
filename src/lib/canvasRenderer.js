@@ -19,6 +19,8 @@
 // both fonts via the FontFace API. `renderFrame(ctx, state, heightmap, t)`
 // paints one frame at simulated page-time `t` (ms since "page load").
 
+import { ORIGIN_UNI } from './originGlyphs.js';
+
 const HEIGHT_TO_CLASS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
 
 // HTML entity decoder for the chars dict (handles &#160; and &#xNN;).
@@ -280,28 +282,33 @@ function parseScriptConstants(scriptText) {
 }
 
 // Reproduce the v0 contract's runtime `charSet` / `mainSet` construction for
-// the daydream branch (MODE=1). V0 builds charSet from the DOM `.a`..`.i`
-// cell content (passed in as `chars`), then optionally appends unicode-block
-// 10-char sets based on SEED ranges. We treat MODE=1 since the preview path
-// forces daydream.
-const V0_UNI = [
-  9600, 9610, 9620, 3900, 9812, 9120, 9590, 143345, 48, 143672, 143682, 143692, 143702,
-  820, 8210, 8680, 9573, 142080, 142085, 142990, 143010, 143030, 9580, 9540, 1470,
-  143762, 143790, 143810,
-];
+// the daydream branch (MODE=1, or MODE=3 for origin). V0 builds charSet from
+// the DOM `.a`..`.i` cell content (passed in as `chars`), then appends
+// unicode-block 10-char sets based on origin-ness and SEED ranges. We treat
+// MODE as a daydream variant since the preview path forces daydream.
+const V0_UNI = ORIGIN_UNI; // same 28-entry on-chain `uni` table, shared source of truth
 function v0MakeSet(start) {
   const out = [];
   for (let i = 0; i < 10; i++) out.push(String.fromCharCode(start + i));
   return out;
 }
-function buildCharSetsV0(c, chars) {
+function buildCharSetsV0(c, chars, isOrigin) {
   // V0 iterates classIds in the order ['i','h','g','f','e','d','c','b','a']
   // and pushes each cell's textContent into originalChars. Mirror that order.
   const order = ['i', 'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
   const originalChars = order.map((cls) => chars[cls] ?? ' ');
   let charSet = [...originalChars];
   const SEED = c.SEED || 0;
-  if (SEED > 9970) {
+  if (isOrigin) {
+    // Origin daydream: every origin parcel appends a unicode-block set (all 28
+    // for high seeds, one seed-picked set otherwise). uni[SEED%28] lands on 48
+    // ('0') for some seeds — that's the digit run seen on origin token pages.
+    if (SEED > 9000) {
+      for (const u of V0_UNI) charSet = charSet.concat(v0MakeSet(u));
+    } else {
+      charSet = charSet.concat(v0MakeSet(V0_UNI[Math.floor(SEED) % V0_UNI.length]));
+    }
+  } else if (SEED > 9970) {
     for (const u of V0_UNI) charSet = charSet.concat(v0MakeSet(u));
   } else if (SEED > 5000) {
     charSet = charSet.concat(v0MakeSet(V0_UNI[Math.floor(SEED) % 3]));
@@ -310,9 +317,27 @@ function buildCharSetsV0(c, chars) {
   return { charSet, mainSet, drive: 0, coreCharsetLength: originalChars.length };
 }
 
-// Reproduce the on-chain `charSet` / `mainSet` construction. We treat MODE=1
-// (Daydream) and ANTENNA=1 since the preview path forces both.
-function buildCharSets(c) {
+// Origin-only "extra pattern" weights from the v2 contract's daydream branch:
+// runs of consecutive glyphs drawn from the seed's uni set, the run lengths
+// picked by SEED % 10. This is what gives origin parcels their dense blocks of
+// a single repeated character (e.g. the wall of '2's on token #38).
+const XTRA_COUNT_PATTERNS = [
+  [16, 16, 16, 2, 2, 2, 2, 4, 4, 4, 4],
+  [16, 32, 8, 16, 2, 2, 2, 2, 4, 4, 4, 4],
+  [2, 4, 2, 4, 2, 24, 8, 8, 8, 8, 4, 4, 2],
+  [2, 2, 2, 2, 2, 8, 8, 8, 8, 4, 4, 4],
+  [12, 4, 2, 8, 8, 4, 4, 4, 8, 4, 4, 4],
+  [24, 4, 4, 2],
+  [8, 4, 4, 2],
+  [2, 8, 2, 2, 8, 2, 2, 2, 8, 4, 4, 4],
+  [5, 5, 5, 5],
+  [7, 7, 7, 7],
+];
+
+// Reproduce the on-chain `charSet` / `mainSet` construction. We treat MODE as a
+// daydream variant (1 = daydream, 3 = origin daydream) and ANTENNA=1, since the
+// preview path forces both.
+function buildCharSets(c, isOrigin) {
   const bCore = c.BIOMECODE.slice();
   // BIOME==0 && MODE>0 && ANTENNA==1 path pushes 5 spaces; doesn't apply for #1627.
   if (c.BIOME === 0) {
@@ -320,6 +345,42 @@ function buildCharSets(c) {
   }
 
   const originalChars = bCore.slice();
+  const SEED = c.SEED || 0;
+  // drive used by the ANTENNA==0 h==0 path — kept for completeness even though
+  // ANTENNA is forced to 1 in our preview.
+  const drive = Math.max(0.1, Math.min(0.2, 0.1 + (SEED / 10000) * 0.1));
+
+  if (isOrigin) {
+    // V2_UNI === V0_UNI (same 28-entry table on-chain). Origin parcels build
+    // their seedSet from these unicode-block ranges rather than the blade.
+    const V2_UNI = V0_UNI;
+    const seedSet = [];
+    let isXSeed = false;
+    if (SEED > 9000) {
+      isXSeed = true;
+      for (const u of V2_UNI) seedSet.push(v0MakeSet(u));
+    } else {
+      seedSet.push(v0MakeSet(V2_UNI[Math.floor(SEED) % V2_UNI.length]));
+    }
+    // xtraPattern: only for the !isXSeed (SEED<=9000) origin case, which is the
+    // common one. Daydream is forced, so the contract's (isDaydream||isTerraformed)
+    // guard always holds here.
+    if (!isXSeed) {
+      const xtra = [];
+      const countPattern = XTRA_COUNT_PATTERNS[SEED % XTRA_COUNT_PATTERNS.length];
+      let i = 0;
+      for (const count of countPattern) {
+        const set = seedSet[SEED % seedSet.length];
+        for (let j = 0; j < count; j++) xtra.push(set[(SEED + i) % set.length]);
+        i++;
+      }
+      seedSet.push(xtra);
+    }
+    const charSet = [originalChars, ...seedSet].flat(Infinity);
+    const mainSet = SEED > 9950 ? charSet : originalChars.slice().reverse();
+    return { charSet, mainSet, drive, coreCharsetLength: bCore.length };
+  }
+
   let patternBlade = [];
   if (c.bladeRailSequencer && c.bladeRailSequencer.length && c.BIOME != null && c.SEED != null) {
     const idx = (c.BIOME + c.SEED) % c.bladeRailSequencer.length;
@@ -330,10 +391,6 @@ function buildCharSets(c) {
   // charSet = [originalChars, ...seedSet].flat(). We follow that case.
   const charSet = [...originalChars, ...patternBlade];
   const mainSet = originalChars.slice().reverse();
-
-  // drive used by ANTENNA==0 h==0 path — kept for completeness even though
-  // ANTENNA is forced to 1 in our preview.
-  const drive = Math.max(0.1, Math.min(0.2, 0.1 + ((c.SEED || 0) / 10000) * 0.1));
   return { charSet, mainSet, drive, coreCharsetLength: bCore.length };
 }
 
@@ -347,8 +404,11 @@ export async function prepareRenderer(html, opts = {}) {
 
   const scriptText = decodeScriptText(html);
   const constants = parseScriptConstants(scriptText);
-  // Preview path forces MODE=1, ANTENNA=1 — mirror that.
-  constants.MODE = 1;
+  // Preview path forces a daydream variant + ANTENNA=1 — mirror that. Origin
+  // parcels (opts.isOrigin) use origin daydream (MODE=3) so the extra origin
+  // glyph set is built; everyone else uses plain daydream (MODE=1).
+  const isOrigin = !!opts.isOrigin;
+  constants.MODE = isOrigin ? 3 : 1;
   constants.ANTENNA = 1;
 
   const keyframes = parseKeyframes(html);
@@ -356,8 +416,8 @@ export async function prepareRenderer(html, opts = {}) {
   const staticColors = parseStaticColors(html);
   const bg = parseBgColor(html);
   const { charSet, mainSet, drive, coreCharsetLength } = constants.version === 'v0'
-    ? buildCharSetsV0(constants, parseChars(html))
-    : buildCharSets(constants);
+    ? buildCharSetsV0(constants, parseChars(html), isOrigin)
+    : buildCharSets(constants, isOrigin);
 
   // Mirror the on-chain runtime timing-function patch: CHROMA="Flow" + certain
   // zones flip linear → steps(1). For #1627 (ZONE=Dhampir) the timing stays linear.

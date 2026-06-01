@@ -37,9 +37,18 @@ export default function ParcelPreview({ animData, heightmap, width = 388, height
 }
 
 // Renders whichever HTML the API returned (v0 or v2 — chosen via ?renderer=v0|v2).
-// MODE is forced to 1 (daydream); ANTENNA is forced to 1 where present. The
-// ANTENNA replace is a no-op on v0 HTML (v0 has no ANTENNA var) which is fine —
-// v0's daydream animation runs unconditionally.
+// MODE is forced into a daydream variant; ANTENNA is forced to 1 where present.
+// The ANTENNA replace is a no-op on v0 HTML (v0 has no ANTENNA var) which is
+// fine — v0's daydream animation runs unconditionally.
+//
+// Origin parcels (on-chain status 3) animate with an extra glyph set the
+// renderer only builds when MODE marks the parcel as origin (3 = origin
+// daydream, 4 = origin terraformed). Forcing plain daydream (MODE=1) on those
+// strips the extra characters — digits, unicode blocks — that show up on
+// token pages. Both the v0 and v2 scripts gate this purely on `isOrigin =
+// MODE==3||MODE==4`, and the v2 tokenHTML for status 1 vs 3 differs ONLY in
+// `let MODE=N` (verified on-chain), so flipping MODE here is a faithful and
+// complete fix for the preview.
 function buildPreviewHtml(animData, heightmap) {
   const { html, chars } = animData;
   const cells = new Array(1024);
@@ -53,8 +62,10 @@ function buildPreviewHtml(animData, heightmap) {
     /(<div class='r'[^>]*>)[\s\S]*?(<\/div>\s*<\/div>\s*<\/foreignObject>)/,
     `$1${cellsHtml}$2`,
   );
-  // Force daydream mode regardless of on-chain status (terrain=0, terra=2, etc.)
-  out = out.replace(/\blet\s+MODE\s*=\s*\d+\b/, 'let MODE=1');
+  // Force a daydream variant regardless of on-chain status (terrain=0, terra=2,
+  // etc.): origin parcels → origin daydream (3), everything else → daydream (1).
+  const mode = animData.status === 3 ? 3 : 1;
+  out = out.replace(/\blet\s+MODE\s*=\s*\d+\b/, `let MODE=${mode}`);
   // Force antenna ON — no-op on v0 scripts that lack this variable
   out = out.replace(/\blet\s+ANTENNA\s*=\s*\d+\b/, 'let ANTENNA=1');
   return out;
