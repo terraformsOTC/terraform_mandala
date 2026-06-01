@@ -114,8 +114,14 @@ function ParcelMeta({ animData }) {
   if (!animData) return null;
 
   // Origin parcels (status 3) animate a seed-derived glyph set in place of the
-  // blade — show it as the origin analog of the BLADE row.
-  const originGlyphs = animData.status === 3 ? originGlyphSet(animData.seed) : null;
+  // blade — show it as the origin analog of the BLADE row. Several uni sets are
+  // Hebrew/diacritic ranges whose combining marks (\p{M}) render zero-width and
+  // collapse onto their neighbours when concatenated; they show as blank cells
+  // in the animation too, so drop them and display only the glyphs that paint.
+  // Fall back to the raw set if one is entirely combining marks, so the row
+  // never silently vanishes for an origin parcel.
+  const rawGlyphs = animData.status === 3 ? originGlyphSet(animData.seed) : null;
+  const originGlyphs = rawGlyphs ? (rawGlyphs.replace(/\p{M}/gu, '') || rawGlyphs) : null;
 
   return (
     <div className="flex flex-col gap-0.5 w-full text-xs" style={{ fontFamily: 'monospace' }}>
