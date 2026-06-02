@@ -4,6 +4,7 @@
 
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import { prepareRenderer, renderFrame } from './canvasRenderer.js';
+import { isOriginStatus } from './originGlyphs.js';
 
 export const DEFAULT_GIF_OPTS = {
   // 2× the iframe's 388×560 outer box. renderFrame scales padding and font
@@ -122,11 +123,12 @@ export async function exportGif({
   // them regardless of the px size requested after the initial load.
   const cellH = (height - 2 * (24 * (height / 560))) / 32;
   const renderFontPx = Math.max(6, Math.round(cellH * (14 / 16)));
-  // status 3 = Origin: triggers the extra origin glyph set in the renderer so
-  // the GIF matches the live preview (which forces MODE=3 for origin parcels).
+  // status 3/4 = origin daydream / origin terraformed: triggers the extra origin
+  // glyph set in the renderer so the GIF matches the live preview (which forces
+  // MODE=3 for both origin variants).
   const state = await prepareRenderer(animData?.html, {
     primeFontPx: renderFontPx,
-    isOrigin: animData?.status === 3,
+    isOrigin: isOriginStatus(animData?.status),
   });
 
   const MAX_ATTEMPTS = 3;

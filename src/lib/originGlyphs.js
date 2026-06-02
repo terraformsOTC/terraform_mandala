@@ -13,6 +13,13 @@
 // their low 16 bits — exactly as the contract does — so the characters here
 // match the ones the renderer paints, glyph-for-glyph.
 
+// On-chain status enum: 0=Terrain, 1=Daydream, 2=Terraformed,
+// 3=OriginDaydream, 4=OriginTerraformed. Both origin variants render the blade
+// replaced by the seed-derived glyph set (the on-chain script gates this on
+// `isOrigin = MODE==3 || MODE==4`, with identical charset construction for the
+// two). One predicate so callers can't special-case 3 and forget 4 again.
+export const isOriginStatus = (status) => status === 3 || status === 4;
+
 export const ORIGIN_UNI = [
   9600, 9610, 9620, 3900, 9812, 9120, 9590, 143345, 48, 143672, 143682, 143692, 143702,
   820, 8210, 8680, 9573, 142080, 142085, 142990, 143010, 143030, 9580, 9540, 1470,

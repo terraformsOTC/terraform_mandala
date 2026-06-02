@@ -7,7 +7,7 @@ import HeightmapInspector from './HeightmapInspector';
 import ParcelPreview from './ParcelPreview';
 import ExportGifButton from './ExportGifButton';
 import { randomSeed } from '@/lib/seedrandom';
-import { originGlyphSet } from '@/lib/originGlyphs';
+import { originGlyphSet, isOriginStatus } from '@/lib/originGlyphs';
 
 // On-chain font shapes the BIOMECODE/BLADE glyphs into full-cell decorative
 // forms. Without it, biomes whose BIOMECODE chars sit in obscure Unicode
@@ -110,18 +110,36 @@ function RendererToggle({ renderer, onChange }) {
   );
 }
 
+// Describe the GLYPHS row for an origin parcel's seed-derived set. Returns
+// { text, glyphFont } — glyphFont=true renders in the on-chain glyph font (real
+// glyphs), false renders as plain type (a text label). Non-origin → null.
+function originGlyphsRow(animData) {
+  if (!isOriginStatus(animData.status)) return null;
+  const seed = Number(animData.seed);
+  // X-Seed parcels (seed > 9000, the on-chain isXSeed threshold) concatenate all
+  // 28 unicode sets — hundreds of glyphs, far more than the row can show — so
+  // label rather than list them. The 3 "godmode" origin parcels (#83/#124/#1955)
+  // sit at seed >= 9970 and run the full set in overdrive; flag them distinctly.
+  if (Number.isFinite(seed) && seed > 9000) {
+    return { text: seed >= 9970 ? 'Godmode Full set' : 'Full set', glyphFont: false };
+  }
+  // seed <= 9000: a single seed-picked set — show the actual glyphs. Several uni
+  // sets are Hebrew/diacritic ranges whose combining marks (\p{M}) render
+  // zero-width and collapse onto their neighbours; they're blank cells in the
+  // animation too, so strip them and show only the glyphs that paint. Fall back
+  // to the raw set if it's entirely marks so the row never silently vanishes.
+  const raw = originGlyphSet(animData.seed);
+  const glyphs = raw ? (raw.replace(/\p{M}/gu, '') || raw) : null;
+  return glyphs ? { text: glyphs, glyphFont: true } : null;
+}
+
 function ParcelMeta({ animData }) {
   if (!animData) return null;
 
-  // Origin parcels (status 3) animate a seed-derived glyph set in place of the
-  // blade — show it as the origin analog of the BLADE row. Several uni sets are
-  // Hebrew/diacritic ranges whose combining marks (\p{M}) render zero-width and
-  // collapse onto their neighbours when concatenated; they show as blank cells
-  // in the animation too, so drop them and display only the glyphs that paint.
-  // Fall back to the raw set if one is entirely combining marks, so the row
-  // never silently vanishes for an origin parcel.
-  const rawGlyphs = animData.status === 3 ? originGlyphSet(animData.seed) : null;
-  const originGlyphs = rawGlyphs ? (rawGlyphs.replace(/\p{M}/gu, '') || rawGlyphs) : null;
+  // Origin parcels (status 3 daydream / 4 terraformed) animate a seed-derived
+  // glyph set in place of the blade — show it as the origin analog of the BLADE
+  // row. See originGlyphsRow for the seed-range handling.
+  const glyphsRow = originGlyphsRow(animData);
 
   return (
     <div className="flex flex-col gap-0.5 w-full text-xs" style={{ fontFamily: 'monospace' }}>
@@ -136,14 +154,14 @@ function ParcelMeta({ animData }) {
           </span>
         </div>
       )}
-      {originGlyphs && (
+      {glyphsRow && (
         <div className="flex items-baseline gap-1.5 w-full overflow-hidden">
           <span className="opacity-50 uppercase tracking-wider shrink-0">GLYPHS:</span>
           <span
             className="opacity-80 whitespace-nowrap overflow-hidden"
-            style={{ fontFamily: META_GLYPH_FONT }}
+            style={glyphsRow.glyphFont ? { fontFamily: META_GLYPH_FONT } : undefined}
           >
-            {originGlyphs}
+            {glyphsRow.text}
           </span>
         </div>
       )}
@@ -178,14 +196,14 @@ function ParcelMeta({ animData }) {
           <span className="opacity-80">{animData.chroma}</span>
         </div>
       )}
-      {/* Origin parcels (status 3) swap the blade out for a seed-derived glyph
+      {/* Origin parcels (status 3/4) swap the blade out for a seed-derived glyph
           set in their daydream/terraform animation, so the BLADE row above is
           real parcel metadata but never appears in the preview. Call it out. */}
-      {animData.status === 3 && (
+      {isOriginStatus(animData.status) && (
         <p className="opacity-50 italic mt-1 w-full">
           please note that for origin daydream and origin terraform parcels, the blade
-          characters do not appear and are replaced with a seed-derived custom glyph
-          set for the animation.
+          characters do not appear in the v2 rendering and are replaced with a
+          seed-derived custom glyph set.
         </p>
       )}
     </div>

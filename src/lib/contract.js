@@ -32,14 +32,19 @@ const RENDERER_ABI = [
 // Mapping confirmed against on-chain observation:
 //  - tokens 7173, 9686 (status 0) display as Terrain on terraforms.xyz
 //  - token 871 (status 2) was committed via commitDreamToCanvas → Terraformed
-//  - token 83 (status 3) is a genesis/1-of-1 → Origin
+//  - token 83 (status 3) is a genesis/1-of-1 origin parcel, pre-commit → Origin
+//  - token 117 (status 4) is an origin parcel that has been terraformed → Origin
 // Status 1 ("Daydream") covers tokens that have called enterDream and are in
-// the editable pre-commit state. Confirmed by project context.
+// the editable pre-commit state. Origin parcels split into daydream (3) and
+// terraformed (4) the same way regular parcels split into 1 and 2; both render
+// the seed-derived glyph set instead of the blade (see originGlyphs.js).
+// Confirmed by project context.
 const STATUS_LABELS = {
   0: 'Terrain',
   1: 'Daydream',
   2: 'Terraformed',
   3: 'Origin',
+  4: 'Origin',
 };
 
 export function statusLabel(status) {
