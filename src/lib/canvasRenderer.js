@@ -558,18 +558,18 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
   // to monospace even when the FontFace is registered.
   ctx.measureText('█');
 
-  // The MathcastlesRemix block/shade glyphs are only ~0.6em wide, but the grid
-  // cells are wider than that (cellW ≈ 0.66·cellH). At the on-chain font size a
-  // block glyph overflows the cell vertically (so bars tile row-to-row) yet
-  // leaves a thin horizontal gap between columns — invisible in the 1× iframe
-  // but obvious in the 2× GIF, where it reads as "cells too narrow". Stretch
-  // glyphs horizontally so a full block fills the cell width and the bars tile
-  // with no vertical seams. measureText gives the real advance (≈0.6em) so this
-  // self-corrects per font/size. Capped so genuinely sparse (low-font-size)
-  // biomes aren't grossly widened, and never compressed (scaleX ≥ 1).
-  const blockAdvance = ctx.measureText('█').width || 0.6 * fontPx;
-  const fillScaleX = Math.min(1.3, Math.max(1, cellW / blockAdvance));
-  const invScaleX = 1 / fillScaleX;
+  // The on-chain terraLoop renders glyphs at TWO sizes: BIOMECODE/core glyphs use
+  // the biome font-size, but any glyph whose charSet index lands past the core
+  // (the blade — block/shade chars) is bumped to a fixed 22px (18px for origin).
+  // That bump is load-bearing: at 22px the block/shade glyph overflows its 16px
+  // cell, so it both tiles seamlessly (no column gaps) AND renders its perforated
+  // pattern at a coarse, legible scale. Drawing the blade at the base biome size
+  // instead makes it look solid/dense and leaves thin gaps between columns. We
+  // mirror the bump, scaled to the canvas cell the same way as the base size.
+  const isOrigin = state.constants.MODE === 3 || state.constants.MODE === 4;
+  const baseFont = `${fontPx}px ${state.fontFamilyCss}`;
+  const bladeFontPx = Math.max(6, Math.round(cellH * ((isOrigin ? 18 : 22) / 16)));
+  const bladeFont = `${bladeFontPx}px ${state.fontFamilyCss}`;
 
   const airship = 0.1 * timeMs;
   const charSetLen = state.charSet.length;
@@ -588,20 +588,20 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
   // Per-height char precompute is only sound for v2 (depends on h + time only).
   // V0's per-cell index depends on row, so it's computed inline below.
   const heightChars = new Array(10);
+  const heightFonts = new Array(10);
   if (!isV0) {
     for (let h = 1; h < 10; h++) {
       let idx = Math.floor(airship * 0.15 - h) % charSetLen;
       if (idx < 0) idx += charSetLen;
       heightChars[h] = decodeEntity(state.charSet[idx] ?? ' ');
+      // Strict > mirrors the on-chain test — the first blade glyph stays base-size.
+      heightFonts[h] = idx > state.coreCharsetLength ? bladeFont : baseFont;
     }
   }
 
-  // Apply the horizontal fill-stretch to the whole grid at once. textAlign is
-  // 'center', so each glyph's screen-x stays at its cell centre when we divide
-  // the draw x by the scale; the bg fill above is left un-stretched.
-  ctx.save();
-  ctx.scale(fillScaleX, 1);
-
+  // ctx.font switches between base and blade size per cell; track the current
+  // value so we only re-set it when it changes (each set re-parses the string).
+  let curFont = baseFont;
   for (let r = 0; r < 32; r++) {
     for (let c = 0; c < 32; c++) {
       const h = heightmap.charCodeAt(r * 32 + c) - 48;
@@ -609,6 +609,7 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
       const cls = HEIGHT_TO_CLASS[h] || 'a';
       const color = classColors[cls] || '#fff';
       let ch;
+      let cellFont = baseFont; // h===0 and v0 paths stay at the base biome size
       if (isV0) {
         // V0 daydream branch — mirrors the on-chain script's setInterval body.
         if (h === 0) {
@@ -630,10 +631,11 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
         ch = decodeEntity(state.mainSet[idx] ?? ' ');
       } else {
         ch = heightChars[h];
+        cellFont = heightFonts[h];
       }
+      if (cellFont !== curFont) { ctx.font = cellFont; curFont = cellFont; }
       ctx.fillStyle = color;
-      ctx.fillText(ch, (padX + c * cellW + cellW / 2) * invScaleX, padY + r * cellH + cellH / 2);
+      ctx.fillText(ch, padX + c * cellW + cellW / 2, padY + r * cellH + cellH / 2);
     }
   }
-  ctx.restore();
 }
