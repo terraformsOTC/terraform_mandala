@@ -558,6 +558,19 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
   // to monospace even when the FontFace is registered.
   ctx.measureText('█');
 
+  // The MathcastlesRemix block/shade glyphs are only ~0.6em wide, but the grid
+  // cells are wider than that (cellW ≈ 0.66·cellH). At the on-chain font size a
+  // block glyph overflows the cell vertically (so bars tile row-to-row) yet
+  // leaves a thin horizontal gap between columns — invisible in the 1× iframe
+  // but obvious in the 2× GIF, where it reads as "cells too narrow". Stretch
+  // glyphs horizontally so a full block fills the cell width and the bars tile
+  // with no vertical seams. measureText gives the real advance (≈0.6em) so this
+  // self-corrects per font/size. Capped so genuinely sparse (low-font-size)
+  // biomes aren't grossly widened, and never compressed (scaleX ≥ 1).
+  const blockAdvance = ctx.measureText('█').width || 0.6 * fontPx;
+  const fillScaleX = Math.min(1.3, Math.max(1, cellW / blockAdvance));
+  const invScaleX = 1 / fillScaleX;
+
   const airship = 0.1 * timeMs;
   const charSetLen = state.charSet.length;
   const mainSetLen = state.mainSet.length;
@@ -582,6 +595,12 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
       heightChars[h] = decodeEntity(state.charSet[idx] ?? ' ');
     }
   }
+
+  // Apply the horizontal fill-stretch to the whole grid at once. textAlign is
+  // 'center', so each glyph's screen-x stays at its cell centre when we divide
+  // the draw x by the scale; the bg fill above is left un-stretched.
+  ctx.save();
+  ctx.scale(fillScaleX, 1);
 
   for (let r = 0; r < 32; r++) {
     for (let c = 0; c < 32; c++) {
@@ -613,7 +632,8 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
         ch = heightChars[h];
       }
       ctx.fillStyle = color;
-      ctx.fillText(ch, padX + c * cellW + cellW / 2, padY + r * cellH + cellH / 2);
+      ctx.fillText(ch, (padX + c * cellW + cellW / 2) * invScaleX, padY + r * cellH + cellH / 2);
     }
   }
+  ctx.restore();
 }
