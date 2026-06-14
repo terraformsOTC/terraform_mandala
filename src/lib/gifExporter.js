@@ -3,7 +3,7 @@
 // just the driver.
 
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
-import { prepareRenderer, renderFrame } from './canvasRenderer.js';
+import { prepareRenderer, renderFrame, parseBaseFontPx } from './canvasRenderer.js';
 import { isOriginStatus } from './originGlyphs.js';
 
 export const DEFAULT_GIF_OPTS = {
@@ -120,9 +120,11 @@ export async function exportGif({
   // the right (family, size) tuple — otherwise the very first frame can still
   // render with monospace fallback while the browser loads the right size.
   // Fonts are re-used as-is for smaller retry passes; document.fonts caches
-  // them regardless of the px size requested after the initial load.
+  // them regardless of the px size requested after the initial load. Use the
+  // parcel's real per-biome .r font-size (matches renderFrame) — not a fixed 14.
+  const baseFontPx = parseBaseFontPx(animData?.html);
   const cellH = (height - 2 * (24 * (height / 560))) / 32;
-  const renderFontPx = Math.max(6, Math.round(cellH * (14 / 16)));
+  const renderFontPx = Math.max(6, Math.round(cellH * (baseFontPx / 16)));
   // status 3/4 = origin daydream / origin terraformed: triggers the extra origin
   // glyph set in the renderer so the GIF matches the live preview (which forces
   // MODE=3 for both origin variants).

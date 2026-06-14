@@ -228,6 +228,20 @@ function parseBgColor(html) {
   return m ? m[1] : '#000';
 }
 
+// The v2 contract assigns a per-biome font-size to the .r grid (observed range
+// 9–26px) while the grid rows stay a constant 16px tall. The block/shade glyphs
+// are sized in em and only tile seamlessly when the font fills the cell, so a
+// 16px-font biome (e.g. 52 / token #1966) or a 26px one (biome 17) looks far too
+// small — with visible gaps — if forced to 14px. renderFrame scales this base
+// size to the canvas cell height, so we read the parcel's ACTUAL .r font-size
+// rather than assuming 14. Unminted parcels arrive with .r already patched to
+// their biome's size (see unminted.js), so parsing here is correct for both.
+export function parseBaseFontPx(html) {
+  const m = html && html.match(/\.r\s*\{[^}]*?font-size\s*:\s*(\d+)px/);
+  const px = m ? Number(m[1]) : 14;
+  return px >= 6 && px <= 64 ? px : 14;
+}
+
 // V0 doesn't expose BIOMECODE — it builds charSet from the DOM-rendered
 // .a–.i cell content at runtime. Parse those characters straight from the
 // HTML so we can mirror the same construction here.
@@ -415,6 +429,7 @@ export async function prepareRenderer(html, opts = {}) {
   const animClasses = parseClassAnimations(html);
   const staticColors = parseStaticColors(html);
   const bg = parseBgColor(html);
+  const baseFontPx = parseBaseFontPx(html);
   const { charSet, mainSet, drive, coreCharsetLength } = constants.version === 'v0'
     ? buildCharSetsV0(constants, parseChars(html), isOrigin)
     : buildCharSets(constants, isOrigin);
@@ -438,6 +453,7 @@ export async function prepareRenderer(html, opts = {}) {
     animClasses,
     staticColors,
     bg,
+    baseFontPx,
     charSet,
     mainSet,
     drive,
@@ -513,19 +529,23 @@ function colorAtTime(cls, t, state) {
 //
 // Geometry matches the on-chain iframe: 388×560 outer box with 24px padding,
 // 32 cells × 16px tall (height fits exactly), columns spaced inside the
-// remaining content width. Font size is 14px to match the on-chain .r rule.
+// remaining content width. Font size is the parcel's on-chain .r font-size
+// (per-biome, 9–26px) scaled to the canvas cell, NOT a fixed 14px.
 export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
   const width = opts.width || ctx.canvas.width;
   const height = opts.height || ctx.canvas.height;
-  // Match iframe layout: scale the 24/388 padding ratio + 14/16 font ratio to
-  // whatever canvas we're given, so cell geometry matches the iframe.
+  // Match iframe layout: scale the 24/388 padding ratio + baseFontPx/16 font
+  // ratio to whatever canvas we're given, so cell geometry matches the iframe.
   const padX = (opts.padding != null ? opts.padding : 24) * (width / 388);
   const padY = (opts.padding != null ? opts.padding : 24) * (height / 560);
   const gridW = width - 2 * padX;
   const gridH = height - 2 * padY;
   const cellW = gridW / 32;
   const cellH = gridH / 32;
-  const fontPx = Math.max(6, Math.round(cellH * (14 / 16)));
+  // On-chain rows are a constant 16px; the .r font-size varies per biome. Scale
+  // that ratio to our cell so block/shade glyphs fill the cell the same way they
+  // do on-chain — assuming 14px here under-sized every other biome and opened gaps.
+  const fontPx = Math.max(6, Math.round(cellH * ((state.baseFontPx || 14) / 16)));
 
   ctx.fillStyle = state.bg || '#000';
   ctx.fillRect(0, 0, width, height);
