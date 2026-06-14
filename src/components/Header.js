@@ -20,6 +20,12 @@ export default function Header({ walletAddress, onConnect, onDisconnect }) {
         </div>
         <div className="flex items-center gap-4">
           <a
+            href="/antenna"
+            className="text-sm opacity-60 hover:opacity-100 transition-opacity no-underline hidden md:inline whitespace-nowrap"
+          >
+            [antenna info]
+          </a>
+          <a
             href="https://terraformestimator.xyz"
             target="_blank"
             rel="noopener noreferrer"
@@ -43,26 +49,30 @@ export default function Header({ walletAddress, onConnect, onDisconnect }) {
           >
             [dream timeline ↗]
           </a>
-          {walletAddress ? (
-            <button
-              type="button"
-              className="btn-primary btn-sm text-xs whitespace-nowrap"
-              onClick={onDisconnect}
-              title="disconnect"
-            >
-              {short} ⨯
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn-primary btn-sm text-xs whitespace-nowrap"
-              onClick={onConnect}
-              disabled={!hasEthereum}
-              title={hasEthereum ? 'connect wallet' : 'no wallet extension detected'}
-            >
-              [connect wallet]
-            </button>
-          )}
+          {/* Wallet controls only render on pages that wire up a connect handler
+              (the designer). Static pages like /antenna pass no handler and skip
+              the button entirely rather than show a dead one. */}
+          {onConnect &&
+            (walletAddress ? (
+              <button
+                type="button"
+                className="btn-primary btn-sm text-xs whitespace-nowrap"
+                onClick={onDisconnect}
+                title="disconnect"
+              >
+                {short} ⨯
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-primary btn-sm text-xs whitespace-nowrap"
+                onClick={onConnect}
+                disabled={!hasEthereum}
+                title={hasEthereum ? 'connect wallet' : 'no wallet extension detected'}
+              >
+                [connect wallet]
+              </button>
+            ))}
         </div>
       </nav>
     </header>
