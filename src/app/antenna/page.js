@@ -53,32 +53,11 @@ export default function AntennaInfo() {
       <Header />
 
       <main className="px-6 flex-1">
-        <h1 className="text-2xl mb-4">terraform antenna info</h1>
+        <h1 className="text-2xl mb-4">antenna info</h1>
         <p className="text-sm opacity-75 leading-relaxed max-w-2xl">
-          This page helps you navigate how to get antenna mode onto your Terraform parcel. For
-          more information about Terraforms and mathcastles, join the{' '}
-          <a
-            href="https://discord.com/invite/mathcastles"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            Discord
-          </a>{' '}
-          or follow them on{' '}
-          <a
-            href="https://twitter.com/mathcastles"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            Twitter
-          </a>
-          .
-        </p>
-
-        <p className="text-sm opacity-60 leading-relaxed max-w-2xl mt-4">
-          This is a backup mirror of{' '}
+          The mandala algorithms were designed to look best on Terraforms pointing to the newer
+          V2 rendering contracts with antenna turned on. If your parcels are still on the old V0
+          version, this guide will walk you through upgrading. It is essentially a backup of{' '}
           <a
             href="https://www.terraformsantenna.info/"
             target="_blank"
@@ -96,17 +75,21 @@ export default function AntennaInfo() {
           >
             imjameshall
           </a>
-          ), kept here in case the original goes offline. Unlike the original, this mirror never
+          ), kept here in case the original goes down. Unlike the original, this mirror never
           connects a wallet or signs transactions — each step links you to the exact Etherscan
           write function so you execute it yourself. Always independently verify a transaction
           before you sign it.
         </p>
 
-        <Step label="Step 0" title="Upgrade to V2">
-          <p>The first step is to move your parcel into V2.</p>
+        <Step label="Step 1" title="Upgrade to V2">
           <p>
-            <span className="opacity-100">What is V2?</span> It lets you see all the new work that
-            will be coming in the future on the art piece.
+            The first step is to move your parcel into V2 if it isn&apos;t pointing to the new
+            contracts already.
+          </p>
+          <p>
+            <span className="opacity-100">What is V2?</span> It is a reversible, opt-in upgrade
+            that changes how Terraforms parcel animations are rendered. The difference is most
+            obvious for parcels in daydream and terraform mode.
           </p>
           <ul className="list-none flex flex-col gap-1 pl-0">
             <li>
@@ -117,7 +100,8 @@ export default function AntennaInfo() {
               on its own in 50 years.
             </li>
             <li>
-              <span className="opacity-100">V2:</span> Where the party is.
+              <span className="opacity-100">V2:</span> The latest rendering contracts which include
+              antenna mode.
             </li>
           </ul>
           <p>
@@ -130,10 +114,10 @@ export default function AntennaInfo() {
           </EtherscanLink>
         </Step>
 
-        <Step label="Step 1" title="Enter Daydream mode">
+        <Step label="Step 2" title="Enter Daydream mode">
           <p>First, enter daydream mode for your parcel.</p>
-          <p className="opacity-100 uppercase tracking-wide" style={{ color: '#f87171' }}>
-            Keep in mind this is irreversible!
+          <p className="opacity-100" style={{ color: '#f87171' }}>
+            Warning: this is irreversible!
           </p>
           <p>
             Call the daydream write function on the Terraforms contract, passing your parcel ID.
@@ -144,7 +128,7 @@ export default function AntennaInfo() {
           </EtherscanLink>
         </Step>
 
-        <Step label="Step 2" title="Turn the antenna ON">
+        <Step label="Step 3" title="Turn the antenna ON">
           <p>Then turn the antenna on for your parcel.</p>
           <p>
             Call the antenna-on write function on the Terraforms Antenna proxy contract, passing
