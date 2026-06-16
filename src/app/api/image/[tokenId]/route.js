@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getContract } from '@/lib/contract';
+import { enforce } from '@/lib/rateLimit';
 
 const CACHE_MAX = 500;
 const CACHE_TTL_MS = 5 * 60_000;
@@ -22,12 +23,16 @@ function cacheSet(key, value) {
 
 const FALLBACK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 277 400" width="277" height="400"><rect width="277" height="400" fill="#1a1918"/><text x="138" y="200" font-size="40" text-anchor="middle" dominant-baseline="middle" fill="#888">▩</text><text x="138" y="260" font-family="monospace" font-size="11" fill="#fff" opacity="0.4" text-anchor="middle">parcel did not load</text></svg>`;
 
-export async function GET(_req, { params }) {
+export async function GET(req, { params }) {
   const { tokenId: rawTokenId } = await params;
   const tokenId = Number(rawTokenId);
   if (!Number.isInteger(tokenId) || tokenId < 1 || tokenId > 11104) {
     return new NextResponse('invalid tokenId', { status: 400 });
   }
+  // Mostly served from the 5-min cache; the limit only bites a cold-cache flood
+  // (many distinct tokenIds) that would otherwise reach RPC on every request.
+  const blocked = enforce(req, 'image', { max: 120, windowMs: 60_000 });
+  if (blocked) return blocked;
   const key = String(tokenId);
   let svg = cacheGet(key);
   if (!svg) {

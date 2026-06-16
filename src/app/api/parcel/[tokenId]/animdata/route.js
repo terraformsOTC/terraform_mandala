@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchV0TokenHTML, fetchV2TokenHTML, extractAnimData } from '@/lib/tokenHTML';
 import { getContract } from '@/lib/contract';
 import { isUnminted, fetchUnmintedAnimData } from '@/lib/unminted';
+import { enforce } from '@/lib/rateLimit';
 
 export async function GET(req, { params }) {
   const { tokenId: rawTokenId } = await params;
@@ -9,6 +10,9 @@ export async function GET(req, { params }) {
   if (!Number.isInteger(tokenId) || tokenId < 1 || tokenId > 11104) {
     return NextResponse.json({ error: 'invalid tokenId' }, { status: 400 });
   }
+  // Each call fans out to several renderer/contract RPC calls.
+  const blocked = enforce(req, 'animdata', { max: 30, windowMs: 60_000 });
+  if (blocked) return blocked;
   // ?renderer=v0|v2. Default v2. Both minted and unminted parcels support both.
   const rendererParam = new URL(req.url).searchParams.get('renderer');
   const requested = rendererParam === 'v0' ? 'v0' : 'v2';
