@@ -7,3 +7,7 @@ node_modules
 # Local-only project context files (notes, reference scripts)
 initial context import files/
 docs/ORIGIN_DAYDREAM_GLYPHS.md
+
+# Syncthing machine-local files (not synced between devices)
+.stfolder/
+.stignore
