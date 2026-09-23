@@ -12,7 +12,7 @@ npm start        # next start
 
 ## Architecture
 
-Single Next.js 14 app (frontend + API routes). Vanilla JS, Tailwind. No separate Express service.
+Single Next.js 15 app (frontend + API routes). Vanilla JS, Tailwind. No separate Express service.
 
 - Browser uses `window.ethereum` (ethers v6 BrowserProvider) for wallet connect.
 - Server-side route handlers (`src/app/api/...`) wrap RPC reads (`tokenURI`, `tokenHTML`, `balanceOf`, `tokenOfOwnerByIndex`) so the RPC URL stays out of the client and we cache aggressively.
