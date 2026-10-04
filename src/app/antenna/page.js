@@ -8,10 +8,10 @@ export const metadata = {
   alternates: { canonical: 'https://terraformmandala.xyz/antenna' },
 };
 
-// Read-only mirror of terraformsantenna.info. Per this project's hard rule, the
-// site never signs transactions — every action links to the exact Etherscan
-// write function so the user executes it themselves. See CLAUDE.md / memory:
-// "No transaction signing on Mandala site".
+// Read-only mirror of terraformsantenna.info. This page never signs
+// transactions — every action links to the exact Etherscan write function so the
+// user executes it themselves. (The only signing path on the site is the
+// heightmap commit in CommitPanel; see CLAUDE.md "Onchain actions".)
 const TERRAFORMS = '0x4e1f41613c9084fdb9e34e11fae9412427480e56';
 const ANTENNA = '0x331512a28a4cf80221af949b5d43041ff0fc7f01';
 

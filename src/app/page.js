@@ -203,8 +203,8 @@ function HomeInner() {
         <h1 className="text-2xl mb-4">heightmap mandala generator</h1>
         <p className="text-sm opacity-75 mb-3">
           Generates mandala-style heightmaps for terraform parcels. Input variables can be flexed
-          to alter the mandala animation. Those familiar with etherscan can export the heightmap
-          and commit it as a drawing onchain.
+          to alter the mandala animation. Connect the wallet that owns a dreaming parcel to commit
+          a mandala to it onchain directly, or export the heightmap for etherscan.
         </p>
         <div className="max-w-2xl flex flex-col gap-2 mb-2 mt-6">
           <label className="text-xs opacity-60 uppercase tracking-wider">input parcel id</label>
@@ -266,6 +266,7 @@ function HomeInner() {
                 onParamsChange={setParams}
                 renderer={renderer}
                 onRendererChange={setRenderer}
+                walletAddress={walletAddress}
               />
             )}
           </section>

@@ -24,7 +24,8 @@ Terraforms contract: `0x4E1f41613c9084FdB9E34E11fAE9412427480e56`.
 
 ### Libraries (`src/lib/`)
 - `mandala.js` — port of d3l33t's mandala-gen2.js. `generateMandala({ seed, variance, peakHeight, startValue, rotationalOrder })` → `{ heightmap, grid }`. Throws if output isn't fully symmetric. Asserts via `heightmap.js`.
-- `heightmap.js` — port of `initial context import files/heightmap_validate.py`. `validate`, `encode` (→ `uint256[16]` hex strings, always 0x-prefixed), `asciiViz`.
+- `heightmap.js` — port of `initial context import files/heightmap_validate.py`. `validate`, `encode` (→ 16 decimal digit strings), `toCanvasUints` (→ BigInt[16] for the contract), `asciiViz`.
+- `commit.js` — the one on-chain write: `prepareCommit` (all pre-send checks), `sendCommit`, `verifyCommit`. See "Onchain actions".
 - `seedrandom.js` — vendored mulberry32 + FNV-1a string hash. No npm dep.
 - `contract.js` — ethers `JsonRpcProvider` singleton, ABI fragments, `statusLabel(n)`. Status enum observed on-chain: `0=Daydreaming, 1=Dreaming, 2=Terraformed, 3=Origin` (status 3 seen on token 83 — special parcel).
 - `tokenHTML.js` — server-side LRU cache (200 entries, 60s TTL). `fetchTokenHTML(id)` returns the raw on-chain HTML. `extractAnimData(html)` regexes out `colors`, `chars`, `bg`, `seed`, `resource`, `direction`. The cell substitution itself happens client-side in `ParcelPreview.buildPreviewHtml`.
@@ -54,7 +55,9 @@ Knob changes update `params`, which trigger a memo'd `generateMandala()` and upd
 
 ## Encoding (the load-bearing technical detail)
 
-Heightmap is 1024 chars (digits 0–9), arranged as 32 rows × 32 cols (row-major). Each `uint256` covers 2 consecutive rows = 64 nibbles = 256 bits. Each height digit IS its hex nibble. `encode()` chunks the string into 16 groups of 64 and prefixes `0x`. **Never** use decimal — wallet form fields silently truncate large decimals.
+Heightmap is 1024 chars (digits 0–9), arranged as 32 rows × 32 cols (row-major). Each `uint256` covers 2 consecutive rows, read as one **64-digit DECIMAL number**, top-left first; the renderer recovers cells by repeated mod 10 over the zero-padded digits, so leading zeros may vanish from the number harmlessly. `encode()` returns the 16 digit strings; `toCanvasUints()` turns them into BigInts.
+
+**Not hex.** An earlier version of this file said each digit was a hex nibble and to prefix `0x`; that is wrong and decodes to a different heightmap. Verified 2026-10-04 three ways: the contract source comment (`TerraformsDreaming.sol`), the stored canvas of committed parcels #117/#871 (clean digit rows in decimal, noise in hex), and a round trip of a random asymmetric heightmap through both renderers' `tokenHeightmapIndices` (1024/1024 cells; the hex form fails). The copy box was always correct because it shows the bare digits, which Etherscan reads as decimal.
 
 ## TODO
 
@@ -62,7 +65,9 @@ Heightmap is 1024 chars (digits 0–9), arranged as 32 rows × 32 cols (row-majo
 
 ## Onchain actions
 
-Deliberately removed. The site is **read-only** with respect to Ethereum: wallet connect is wired up so users can browse their owned parcels in the grid, but there is no signer-side code path that submits a transaction. The blast radius if the site is ever compromised was judged too large. Users who want to commit a heightmap copy the encoded `uint256[16]` array from `HeightmapInspector` and submit it manually via Etherscan. Do not re-add `signer.sendTransaction` / `contract.connect(signer)` paths without an explicit ask.
+Exactly one, added 2026-10-04 at James's explicit request: committing the current mandala with `Terraforms.commitDreamToCanvas(uint256 tokenId, uint256[16] dream)` (selector `0x502f260c`, from the verified source on Sourcify) via `src/lib/commit.js` and `CommitPanel.js`. The site was read-only before this because of the blast radius if it were ever compromised; this path is kept narrow for that reason — no value is sent, no approvals, nothing that can move a token. Worst case for a compromised site is committing a different heightmap to a parcel the user owns.
+
+Before signing, `prepareCommit` checks: minted id, 1024-digit heightmap, mainnet, owner or authorized dreamer, status % 2 == 1 (the contract's require), that BOTH renderers decode the uints back to the exact heightmap, and a simulated `eth_call` from the user's address. `sendCommit` re-checks chain and signer right before signing; `verifyCommit` reads back status and all 16 stored uints. Do not add other write paths (enterDream, antenna, transfers) without an explicit ask; the antenna page still links to Etherscan.
 
 ## SEO / OpenGraph
 

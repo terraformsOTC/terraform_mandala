@@ -1,9 +1,13 @@
 // Heightmap utilities — port of initial context import files/heightmap_validate.py.
 //
 // Heightmap is 1024 chars (digits 0–9), arranged as a 32x32 grid (row-major).
-// Encodes as uint256[16]: each uint256 covers 2 rows = 64 nibbles. Each height
-// digit maps directly to a hex nibble. Always produce hex with 0x prefix —
-// decimal silently truncates in some wallets.
+// Encodes as uint256[16] for commitDreamToCanvas: each uint is two rows read as
+// one 64-digit DECIMAL number, top-left first. The renderer recovers the cells
+// by repeated mod 10 over the zero-padded 64 digits, so leading zeros can drop
+// out of the number without losing anything. Verified 2026-10-04 by decoding
+// through both on-chain renderers' tokenHeightmapIndices (1024/1024 cells) and
+// against the stored canvas of committed parcels (#117, #871). NOT hex: a
+// 0x-prefixed form decodes to a different heightmap.
 
 export const SIDE = 32;
 export const TOTAL = 1024;
@@ -64,8 +68,13 @@ export function encode(hm) {
   if (s.length !== TOTAL) throw new Error(`encode: expected ${TOTAL} chars, got ${s.length}`);
   if (!/^[0-9]+$/.test(s)) throw new Error('encode: heightmap must be digits 0-9 only');
   const out = [];
-  for (let i = 0; i < 16; i++) out.push('0x' + s.slice(i * 64, (i + 1) * 64));
+  for (let i = 0; i < 16; i++) out.push(s.slice(i * 64, (i + 1) * 64));
   return out;
+}
+
+// The uint256[16] argument for commitDreamToCanvas, as BigInts.
+export function toCanvasUints(hm) {
+  return encode(hm).map((digits) => BigInt(digits));
 }
 
 export function asciiViz(hm) {
