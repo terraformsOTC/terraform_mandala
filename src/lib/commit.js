@@ -55,9 +55,22 @@ const RENDERER_ABI = [
 const RENDERER_INDEX_SLOT = 11128n;
 export const V2_INDEX = 2n;
 
+// Read through the wallet's own connection first; some wallets do not serve
+// eth_getStorageAt, so fall back to the site's server-side read of the same slot.
 async function readRendererIndex(provider, id) {
   const slot = keccak256(AbiCoder.defaultAbiCoder().encode(['uint256', 'uint256'], [id, RENDERER_INDEX_SLOT]));
-  return BigInt(await provider.getStorage(TERRAFORMS_ADDRESS, slot));
+  try {
+    return BigInt(await provider.getStorage(TERRAFORMS_ADDRESS, slot));
+  } catch {
+    try {
+      const res = await fetch(`/api/parcel/${id}/renderer`, { cache: 'no-store' });
+      const body = await res.json();
+      if (res.ok && /^\d+$/.test(String(body.index))) return BigInt(body.index);
+    } catch {
+      // fall through to the error below
+    }
+    throw new CommitError(`Could not read which renderer parcel #${id} uses. Try again in a moment.`);
+  }
 }
 
 export const STATUS_NAMES = ['Terrain', 'Daydream', 'Terraformed', 'Origin Daydream', 'Origin Terraformed'];
