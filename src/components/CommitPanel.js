@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CommitError, STATUS_NAMES, prepareCommit, sendCommit, verifyCommit } from '@/lib/commit';
+import {
+  CommitError, STATUS_NAMES, prepareCommit, sendCommit, verifyCommit,
+  prepareMigrate, sendMigrate, verifyMigrate,
+} from '@/lib/commit';
 import { TERRAFORMS_ADDRESS } from '@/lib/contract';
 
 const ETHERSCAN_TX = (hash) => `https://etherscan.io/tx/${hash}`;
@@ -12,9 +15,15 @@ const SHORT_ADDRESS = `${TERRAFORMS_ADDRESS.slice(0, 6)}…${TERRAFORMS_ADDRESS.
  * Commit the current mandala to the selected parcel. Each stage is explicit:
  * checks (with a visible checklist), a confirmation that spells out what will
  * change, the wallet signature, then a read-back of what the chain stored.
+ *
+ * A parcel still on the v0 renderer is offered the migration to v2 first, as
+ * its own transaction with the same stages (mode 'migrate'); the commit checks
+ * then run again.
  */
 export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
   const [stage, setStage] = useState('idle'); // idle | checking | confirm | signing | pending | done | error
+  const [mode, setMode] = useState('commit'); // commit | migrate
+  const [needsV2, setNeedsV2] = useState(false);
   const [steps, setSteps] = useState([]);
   const [prepared, setPrepared] = useState(null);
   const [txHash, setTxHash] = useState(null);
@@ -23,6 +32,8 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
   // Any change to what would be committed invalidates a prepared commit.
   useEffect(() => {
     setStage('idle');
+    setMode('commit');
+    setNeedsV2(false);
     setSteps([]);
     setPrepared(null);
     setTxHash(null);
@@ -33,20 +44,22 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
 
   const fail = (err) => {
     setStage('error');
+    setNeedsV2(Boolean(err?.needsV2));
     setMessage(err instanceof CommitError ? err.message : err?.shortMessage || err?.message || String(err));
   };
 
-  const runChecks = async () => {
+  const runChecks = async (nextMode = 'commit') => {
+    setMode(nextMode);
+    setNeedsV2(false);
     setStage('checking');
     setSteps([]);
     setMessage(null);
+    setTxHash(null);
+    const onStep = (label) => setSteps((s) => [...s, label]);
     try {
-      const result = await prepareCommit({
-        tokenId,
-        heightmap,
-        account: walletAddress,
-        onStep: (label) => setSteps((s) => [...s, label]),
-      });
+      const result = nextMode === 'migrate'
+        ? await prepareMigrate({ tokenId, account: walletAddress, onStep })
+        : await prepareCommit({ tokenId, heightmap, account: walletAddress, onStep });
       setPrepared(result);
       setStage('confirm');
     } catch (err) {
@@ -57,11 +70,23 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
   const confirm = async () => {
     setStage('signing');
     try {
-      const tx = await sendCommit(prepared, walletAddress);
+      const tx = mode === 'migrate'
+        ? await sendMigrate(prepared, walletAddress)
+        : await sendCommit(prepared, walletAddress);
       setTxHash(tx.hash);
       setStage('pending');
       const receipt = await tx.wait();
       if (receipt.status !== 1) throw new CommitError('The transaction was mined but reverted. Nothing changed on the parcel.');
+      if (mode === 'migrate') {
+        const check = await verifyMigrate(prepared);
+        setStage('done');
+        setMessage(
+          check.ok
+            ? `Migrated. Parcel #${tokenId} now renders with v2.`
+            : `The transaction succeeded, but the read-back did not confirm v2 (renderer index ${check.index}). Check the parcel on Etherscan.`,
+        );
+        return;
+      }
       const check = await verifyCommit(prepared);
       setStage('done');
       setMessage(
@@ -95,7 +120,9 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
 
   return (
     <div className="flex flex-col gap-2 text-xs p-3" style={BOX}>
-      <span className="opacity-60 uppercase tracking-wider">commit on-chain</span>
+      <span className="opacity-60 uppercase tracking-wider">
+        {mode === 'migrate' ? 'migrate to v2' : 'commit on-chain'}
+      </span>
 
       {stage === 'idle' && (
         <>
@@ -103,7 +130,7 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
             Write this mandala to parcel #{tokenId} from your wallet. The site checks everything
             before you sign; nothing is sent until you confirm.
           </p>
-          <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={runChecks}>
+          <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => runChecks('commit')}>
             [check & commit to #{tokenId}]
           </button>
         </>
@@ -114,28 +141,55 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
       {stage === 'error' && (
         <>
           <p style={{ color: '#f87171' }} className="leading-relaxed">{message}</p>
-          <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={runChecks}>
-            [run checks again]
-          </button>
+          {needsV2 ? (
+            <>
+              <p className="opacity-75 leading-relaxed">
+                Migrating changes only which on-chain renderer draws the parcel. It is a separate
+                transaction, it can be switched back, and nothing else about the parcel changes.
+              </p>
+              <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => runChecks('migrate')}>
+                [migrate #{tokenId} to v2]
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => runChecks(mode)}>
+              [run checks again]
+            </button>
+          )}
         </>
       )}
 
       {(stage === 'confirm' || stage === 'signing') && prepared && (
         <>
           {checklist(true)}
-          <div className="mt-2 p-2 leading-relaxed" style={BOX}>
-            <p>
-              Parcel #{prepared.tokenId} goes from <strong>{STATUS_NAMES[prepared.status]}</strong> to{' '}
-              <strong>{STATUS_NAMES[prepared.newStatus]}</strong> and shows this heightmap.
-            </p>
-            <p className="opacity-75 mt-1">
-              It stays that way unless the parcel enters daydream mode again and a new heightmap is
-              committed. Estimated gas: {prepared.gas.toString()} units, paid by you.
-            </p>
-            <p className="opacity-50 mt-1 break-all">
-              Terraforms.commitDreamToCanvas({prepared.tokenId}, uint256[16]) — contract {SHORT_ADDRESS}
-            </p>
-          </div>
+          {mode === 'migrate' ? (
+            <div className="mt-2 p-2 leading-relaxed" style={BOX}>
+              <p>
+                Parcel #{prepared.tokenId} switches from the <strong>v{prepared.from === 1n ? '1' : '0'}</strong> renderer
+                to <strong>v2</strong>. Its heightmap, mode and everything else stay as they are.
+              </p>
+              <p className="opacity-75 mt-1">
+                Estimated gas: {prepared.gas.toString()} units, paid by you.
+              </p>
+              <p className="opacity-50 mt-1 break-all">
+                Terraforms.setTokenURIAddress([{prepared.tokenId}], 2) — contract {SHORT_ADDRESS}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-2 p-2 leading-relaxed" style={BOX}>
+              <p>
+                Parcel #{prepared.tokenId} goes from <strong>{STATUS_NAMES[prepared.status]}</strong> to{' '}
+                <strong>{STATUS_NAMES[prepared.newStatus]}</strong> and shows this heightmap.
+              </p>
+              <p className="opacity-75 mt-1">
+                It stays that way unless the parcel enters daydream mode again and a new heightmap is
+                committed. Estimated gas: {prepared.gas.toString()} units, paid by you.
+              </p>
+              <p className="opacity-50 mt-1 break-all">
+                Terraforms.commitDreamToCanvas({prepared.tokenId}, uint256[16]) — contract {SHORT_ADDRESS}
+              </p>
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
@@ -166,10 +220,17 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
       )}
 
       {stage === 'done' && (
-        <p className="leading-relaxed">
-          {message}{' '}
-          <a href={ETHERSCAN_TX(txHash)} target="_blank" rel="noopener noreferrer">[etherscan ↗]</a>
-        </p>
+        <>
+          <p className="leading-relaxed">
+            {message}{' '}
+            <a href={ETHERSCAN_TX(txHash)} target="_blank" rel="noopener noreferrer">[etherscan ↗]</a>
+          </p>
+          {mode === 'migrate' && (
+            <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => runChecks('commit')}>
+              [continue to commit checks]
+            </button>
+          )}
+        </>
       )}
     </div>
   );

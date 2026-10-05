@@ -1,6 +1,7 @@
-// Commit a mandala heightmap on-chain with Terraforms.commitDreamToCanvas.
+// Commit a mandala heightmap on-chain with Terraforms.commitDreamToCanvas, and
+// (if needed first) move the parcel to the v2 renderer with setTokenURIAddress.
 //
-// This is the only code path on the site that writes to Ethereum, so every
+// These are the only code paths on the site that write to Ethereum, so every
 // step is checked against the chain itself rather than assumed:
 //
 //   1. the wallet is on mainnet and is the account the user connected;
@@ -14,11 +15,16 @@
 //      selector would silently succeed rather than revert;
 //   6. after mining, the stored canvas and new status are read back.
 //
+// The commit also requires the parcel to render with v2 (renderer index 2);
+// otherwise the mandala would show in the older v0 style. Migration is its own
+// transaction with the same layers — see prepareMigrate below.
+//
 // Contract facts below are from the verified source on Sourcify
-// (contracts/TerraformsDreaming.sol), checked 2026-10-04: selector 0x502f260c
-// is present in the deployed bytecode.
+// (contracts/Terraforms.sol, TerraformsDreaming.sol): selectors 0x502f260c
+// (commitDreamToCanvas) and 0x29fdf854 (setTokenURIAddress) are present in the
+// deployed bytecode (checked 2026-10-04 / 2026-10-05).
 
-import { BrowserProvider, Contract } from 'ethers';
+import { AbiCoder, BrowserProvider, Contract, keccak256 } from 'ethers';
 import { TERRAFORMS_ADDRESS, V0_RENDERER_ADDRESS, V2_RENDERER_ADDRESS } from './contract';
 import { toCanvasUints, validate, TOTAL } from './heightmap';
 
@@ -26,6 +32,9 @@ const MAINNET = 1n;
 
 const TERRAFORMS_ABI = [
   'function commitDreamToCanvas(uint256 tokenId, uint256[16] dream)',
+  'function setTokenURIAddress(uint256[] tokens, uint256 index)',
+  'function tokenURIAddresses(uint256 index) view returns (address)',
+  'function tokenHTML(uint256 tokenId) view returns (string)',
   'function ownerOf(uint256 tokenId) view returns (address)',
   'function tokenToStatus(uint256 tokenId) view returns (uint8)',
   'function tokenToAuthorizedDreamer(uint256 tokenId) view returns (address)',
@@ -36,14 +45,34 @@ const TERRAFORMS_ABI = [
 
 const RENDERER_ABI = [
   'function tokenHeightmapIndices(uint256 status, uint256 placement, uint256 seed, uint256 yearsOfDecay, uint256[] canvasData) view returns (uint256[32][32])',
+  'function tokenHTML(uint256 status, uint256 placement, uint256 seed, uint256 yearsOfDecay, uint256[] canvasData) view returns (string)',
 ];
+
+// The renderer a parcel uses is tokenURIAddresses[tokenToURIAddressIndex[id]].
+// The mapping is private, so it is read from storage: slot 11128 (large fixed
+// arrays earlier in the contract push it out). Verified 2026-10-05 on six
+// parcels against which renderer reproduces the contract's own tokenHTML.
+const RENDERER_INDEX_SLOT = 11128n;
+export const V2_INDEX = 2n;
+
+async function readRendererIndex(provider, id) {
+  const slot = keccak256(AbiCoder.defaultAbiCoder().encode(['uint256', 'uint256'], [id, RENDERER_INDEX_SLOT]));
+  return BigInt(await provider.getStorage(TERRAFORMS_ADDRESS, slot));
+}
 
 export const STATUS_NAMES = ['Terrain', 'Daydream', 'Terraformed', 'Origin Daydream', 'Origin Terraformed'];
 
 // The contract's gate: commitDreamToCanvas requires status % 2 == 1.
 export const isDreamingStatus = (status) => Number(status) % 2 === 1;
 
-export class CommitError extends Error {}
+export class CommitError extends Error {
+  constructor(message, { needsV2 = false } = {}) {
+    super(message);
+    // The commit check stopped only because the parcel is not on v2 yet; the
+    // panel offers the migration instead of a dead end.
+    this.needsV2 = needsV2;
+  }
+}
 
 function walletProvider() {
   if (typeof window === 'undefined' || !window.ethereum) {
@@ -91,6 +120,17 @@ export async function prepareCommit({ tokenId, heightmap, account, onStep = () =
   const me = account.toLowerCase();
   if (owner.toLowerCase() !== me && authorized.toLowerCase() !== me) {
     throw new CommitError(`Parcel #${tokenId} is owned by ${owner}, not the connected wallet.`);
+  }
+
+  // Before the status gate, so an already-committed v0 parcel is still offered
+  // the migration.
+  onStep(`parcel #${tokenId} renders with v2`);
+  const rendererIndex = await readRendererIndex(provider, id);
+  if (rendererIndex !== V2_INDEX) {
+    throw new CommitError(
+      `Parcel #${tokenId} still uses the older v0 renderer, so a mandala would show in the v0 style. Migrate it to v2 first.`,
+      { needsV2: true },
+    );
   }
 
   const status = Number(statusRaw);
@@ -178,4 +218,106 @@ export async function verifyCommit(prepared) {
   const stored = await Promise.all(prepared.dream.map((_, i) => tf.tokenToCanvasData(id, i)));
   const canvasOk = stored.every((v, i) => v === prepared.dream[i]);
   return { ok: canvasOk && status === prepared.newStatus, status, canvasOk };
+}
+
+// --- Migration to the v2 renderer --------------------------------------------
+//
+// setTokenURIAddress(uint256[] tokens, uint256 index) writes only the parcel's
+// renderer index; it requires msg.sender to OWN every listed token (an
+// authorized dreamer is not enough) and index < tokenURIAddresses.length. No
+// ETH, no transfers, no events, and it is reversible. The site only ever sends
+// it for ONE parcel and index 2, and checks that index 2 still points at the v2
+// renderer, since the contract owner can append renderers.
+
+const MIGRATE_SELECTOR = '0x29fdf854';
+const MIGRATE_CALLDATA_BYTES = 4 + 32 * 4; // offset, index, length 1, tokenId
+
+export async function prepareMigrate({ tokenId, account, onStep = () => {}, provider: injected }) {
+  const id = BigInt(tokenId);
+  if (id < 1n || id > 9911n) throw new CommitError('Only minted parcels (#1–#9911) can be migrated.');
+  const provider = injected ?? walletProvider();
+  onStep('wallet is on Ethereum mainnet');
+  await requireMainnet(provider);
+  const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, provider);
+
+  onStep(`you own parcel #${tokenId}`);
+  const owner = await tf.ownerOf(id);
+  if (owner.toLowerCase() !== account.toLowerCase()) {
+    throw new CommitError(`Only the owner can change a parcel's renderer. Parcel #${tokenId} is owned by ${owner}.`);
+  }
+
+  onStep('renderer slot 2 is the v2 renderer');
+  const v2 = await tf.tokenURIAddresses(V2_INDEX);
+  if (v2.toLowerCase() !== V2_RENDERER_ADDRESS.toLowerCase()) {
+    throw new CommitError(`Safety check failed: renderer slot 2 is ${v2}, not the expected v2 renderer. Nothing was sent.`);
+  }
+
+  onStep(`parcel #${tokenId} is not on v2 yet`);
+  const current = await readRendererIndex(provider, id);
+  if (current === V2_INDEX) throw new CommitError(`Parcel #${tokenId} already renders with v2.`);
+
+  onStep('the transaction simulates successfully');
+  try {
+    await tf.setTokenURIAddress.staticCall([id], V2_INDEX, { from: account });
+  } catch (err) {
+    throw new CommitError(`The contract would reject this transaction (${err.shortMessage || err.message}). Nothing was sent.`);
+  }
+  const gas = await tf.setTokenURIAddress.estimateGas([id], V2_INDEX, { from: account });
+  return { tokenId: Number(id), from: current, gas };
+}
+
+export async function sendMigrate(prepared, account) {
+  const provider = walletProvider();
+  await requireMainnet(provider);
+  const signer = await provider.getSigner();
+  if ((await signer.getAddress()).toLowerCase() !== account.toLowerCase()) {
+    throw new CommitError('The wallet account changed. Reconnect and try again.');
+  }
+  const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, signer);
+  const gasLimit = (prepared.gas * 120n) / 100n;
+  const tx = await tf.setTokenURIAddress.populateTransaction([BigInt(prepared.tokenId)], V2_INDEX, { gasLimit });
+  assertMigrateTransaction(tx, prepared);
+  return signer.sendTransaction(tx);
+}
+
+// Byte-level check of the migration handed to the wallet, for the same
+// fallback() reason as the commit: right contract, setTokenURIAddress, exactly
+// one tokenId, index 2, no ETH.
+export function assertMigrateTransaction(tx, prepared) {
+  const fail = (why) => {
+    throw new CommitError(`Safety check failed: ${why}. Nothing was sent.`);
+  };
+  if (!tx.to || tx.to.toLowerCase() !== TERRAFORMS_ADDRESS.toLowerCase()) fail('the transaction is not addressed to the Terraforms contract');
+  if (tx.value != null && BigInt(tx.value) !== 0n) fail('the transaction would send ETH');
+  if (!tx.data?.startsWith(MIGRATE_SELECTOR)) fail('the transaction does not call setTokenURIAddress');
+  if ((tx.data.length - 2) / 2 !== MIGRATE_CALLDATA_BYTES) fail('the transaction data is not the expected size');
+  const [tokens, index] = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI).interface
+    .decodeFunctionData('setTokenURIAddress', tx.data);
+  if (tokens.length !== 1 || tokens[0] !== BigInt(prepared.tokenId)) fail('the transaction would change a different set of parcels');
+  if (index !== V2_INDEX) fail('the transaction would select a renderer other than v2');
+}
+
+/** After mining: the stored index is 2 and the parcel's own HTML is v2's output. */
+export async function verifyMigrate(prepared) {
+  const provider = walletProvider();
+  const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, provider);
+  const id = BigInt(prepared.tokenId);
+  const index = await readRendererIndex(provider, id);
+  const [status, placement, seed, html] = await Promise.all([
+    tf.tokenToStatus(id), tf.tokenToPlacement(id), tf.seed(), tf.tokenHTML(id),
+  ]);
+  // The contract passes whatever canvas is stored, whatever the status (a parcel
+  // that re-entered dream keeps its old one), so read it as stored: the public
+  // getter reverts past the end of the array.
+  const canvas = [];
+  for (let i = 0; i < 16; i++) {
+    try {
+      canvas.push(await tf.tokenToCanvasData(id, i));
+    } catch {
+      break;
+    }
+  }
+  const v2Html = await new Contract(V2_RENDERER_ADDRESS, RENDERER_ABI, provider)
+    .tokenHTML(status, placement, seed, 0, canvas);
+  return { ok: index === V2_INDEX && html === v2Html, index };
 }
