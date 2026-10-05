@@ -9,7 +9,10 @@
 //   3. the encoded uint256[16] decodes back to the exact heightmap through BOTH
 //      on-chain renderers' tokenHeightmapIndices (a free view call);
 //   4. the exact transaction is simulated from the user's address (eth_call);
-//   5. after mining, the stored canvas and new status are read back.
+//   5. the transaction handed to the wallet is checked byte for byte
+//      (assertCommitTransaction) — Terraforms' payable fallback() means a wrong
+//      selector would silently succeed rather than revert;
+//   6. after mining, the stored canvas and new status are read back.
 //
 // Contract facts below are from the verified source on Sourcify
 // (contracts/TerraformsDreaming.sol), checked 2026-10-04: selector 0x502f260c
@@ -139,7 +142,31 @@ export async function sendCommit(prepared, account) {
   const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, signer);
   // 20% headroom over the estimate; unused gas is not charged.
   const gasLimit = (prepared.gas * 120n) / 100n;
-  return tf.commitDreamToCanvas(BigInt(prepared.tokenId), prepared.dream, { gasLimit });
+  const tx = await tf.commitDreamToCanvas.populateTransaction(BigInt(prepared.tokenId), prepared.dream, { gasLimit });
+  assertCommitTransaction(tx, prepared);
+  return signer.sendTransaction(tx);
+}
+
+// Terraforms has a payable fallback(), so a call with the wrong selector would
+// not revert — it would "succeed" and do nothing, and so would its simulation.
+// The transaction handed to the wallet is therefore checked byte for byte:
+// right contract, commitDreamToCanvas's selector, exactly one tokenId plus 16
+// uints of calldata, no ETH, and arguments that decode back to what was checked.
+const COMMIT_SELECTOR = '0x502f260c';
+const COMMIT_CALLDATA_BYTES = 4 + 32 + 16 * 32;
+
+export function assertCommitTransaction(tx, prepared) {
+  const fail = (why) => {
+    throw new CommitError(`Safety check failed: ${why}. Nothing was sent.`);
+  };
+  if (!tx.to || tx.to.toLowerCase() !== TERRAFORMS_ADDRESS.toLowerCase()) fail('the transaction is not addressed to the Terraforms contract');
+  if (tx.value != null && BigInt(tx.value) !== 0n) fail('the transaction would send ETH');
+  if (!tx.data?.startsWith(COMMIT_SELECTOR)) fail('the transaction does not call commitDreamToCanvas');
+  if ((tx.data.length - 2) / 2 !== COMMIT_CALLDATA_BYTES) fail('the transaction data is not the expected size');
+  const [tokenId, dream] = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI).interface
+    .decodeFunctionData('commitDreamToCanvas', tx.data);
+  if (tokenId !== BigInt(prepared.tokenId)) fail('the transaction targets a different parcel');
+  if (dream.length !== 16 || dream.some((v, i) => v !== prepared.dream[i])) fail('the transaction carries a different heightmap');
 }
 
 /** Reads the parcel back after mining: new status and all 16 stored uints. */
