@@ -57,13 +57,14 @@ export const V2_INDEX = 2n;
 
 // Read through the wallet's own connection first; some wallets do not serve
 // eth_getStorageAt, so fall back to the site's server-side read of the same slot.
-async function readRendererIndex(provider, id) {
+async function readRendererIndex(provider, id, blockTag = 'latest') {
   const slot = keccak256(AbiCoder.defaultAbiCoder().encode(['uint256', 'uint256'], [id, RENDERER_INDEX_SLOT]));
   try {
-    return BigInt(await provider.getStorage(TERRAFORMS_ADDRESS, slot));
+    return BigInt(await provider.getStorage(TERRAFORMS_ADDRESS, slot, blockTag));
   } catch {
     try {
-      const res = await fetch(`/api/parcel/${id}/renderer`, { cache: 'no-store' });
+      const block = typeof blockTag === 'number' ? `?block=${blockTag}` : '';
+      const res = await fetch(`/api/parcel/${id}/renderer${block}`, { cache: 'no-store' });
       const body = await res.json();
       if (res.ok && /^\d+$/.test(String(body.index))) return BigInt(body.index);
     } catch {
@@ -223,12 +224,25 @@ export function assertCommitTransaction(tx, prepared) {
 }
 
 /** Reads the parcel back after mining: new status and all 16 stored uints. */
-export async function verifyCommit(prepared) {
+// Read-backs are pinned to the block the transaction was mined in. Reading
+// "latest" straight after mining can hit a wallet node that is a block behind and
+// report a successful transaction as failed. Waits (briefly) for the node to have
+// that block first.
+async function blockReady(provider, blockNumber) {
+  for (let i = 0; i < 20; i++) {
+    if ((await provider.getBlockNumber()) >= blockNumber) return blockNumber;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  throw new CommitError('The transaction was mined, but your wallet\'s connection has not caught up yet. Check the parcel on Etherscan.');
+}
+
+export async function verifyCommit(prepared, blockNumber) {
   const provider = walletProvider();
+  const blockTag = await blockReady(provider, blockNumber);
   const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, provider);
   const id = BigInt(prepared.tokenId);
-  const status = Number(await tf.tokenToStatus(id));
-  const stored = await Promise.all(prepared.dream.map((_, i) => tf.tokenToCanvasData(id, i)));
+  const status = Number(await tf.tokenToStatus(id, { blockTag }));
+  const stored = await Promise.all(prepared.dream.map((_, i) => tf.tokenToCanvasData(id, i, { blockTag })));
   const canvasOk = stored.every((v, i) => v === prepared.dream[i]);
   return { ok: canvasOk && status === prepared.newStatus, status, canvasOk };
 }
@@ -310,27 +324,44 @@ export function assertMigrateTransaction(tx, prepared) {
   if (index !== V2_INDEX) fail('the transaction would select a renderer other than v2');
 }
 
-/** After mining: the stored index is 2 and the parcel's own HTML is v2's output. */
-export async function verifyMigrate(prepared) {
+/**
+ * After mining: the parcel's stored renderer index at the mined block is 2. That
+ * is the decisive check — the contract routes tokenHTML by exactly this value.
+ *
+ * Comparing the parcel's tokenHTML with the v2 renderer's output is kept as a
+ * best-effort extra only: generating a parcel's HTML costs ~9–10M gas for many
+ * parcels and over 30M for some (#5257), which many RPC nodes refuse for a read
+ * call. A refusal must not make a successful migration look failed — which is
+ * what happened on #9230 (2026-10-05). htmlCheck: 'match' | 'mismatch' | 'skipped'.
+ */
+export async function verifyMigrate(prepared, blockNumber) {
   const provider = walletProvider();
+  const blockTag = await blockReady(provider, blockNumber);
   const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, provider);
   const id = BigInt(prepared.tokenId);
-  const index = await readRendererIndex(provider, id);
-  const [status, placement, seed, html] = await Promise.all([
-    tf.tokenToStatus(id), tf.tokenToPlacement(id), tf.seed(), tf.tokenHTML(id),
-  ]);
-  // The contract passes whatever canvas is stored, whatever the status (a parcel
-  // that re-entered dream keeps its old one), so read it as stored: the public
-  // getter reverts past the end of the array.
-  const canvas = [];
-  for (let i = 0; i < 16; i++) {
-    try {
-      canvas.push(await tf.tokenToCanvasData(id, i));
-    } catch {
-      break;
+  const index = await readRendererIndex(provider, id, blockTag);
+
+  let htmlCheck = 'skipped';
+  try {
+    const [status, placement, seed, html] = await Promise.all([
+      tf.tokenToStatus(id, { blockTag }), tf.tokenToPlacement(id, { blockTag }), tf.seed({ blockTag }), tf.tokenHTML(id, { blockTag }),
+    ]);
+    // The contract passes whatever canvas is stored, whatever the status (a
+    // parcel that re-entered dream keeps its old one), so read it as stored: the
+    // public getter reverts past the end of the array.
+    const canvas = [];
+    for (let i = 0; i < 16; i++) {
+      try {
+        canvas.push(await tf.tokenToCanvasData(id, i, { blockTag }));
+      } catch {
+        break;
+      }
     }
+    const v2Html = await new Contract(V2_RENDERER_ADDRESS, RENDERER_ABI, provider)
+      .tokenHTML(status, placement, seed, 0, canvas, { blockTag });
+    htmlCheck = html === v2Html ? 'match' : 'mismatch';
+  } catch {
+    // The node would not run the HTML call; the index check above stands.
   }
-  const v2Html = await new Contract(V2_RENDERER_ADDRESS, RENDERER_ABI, provider)
-    .tokenHTML(status, placement, seed, 0, canvas);
-  return { ok: index === V2_INDEX && html === v2Html, index };
+  return { ok: index === V2_INDEX, index, htmlCheck };
 }

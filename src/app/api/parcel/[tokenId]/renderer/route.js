@@ -17,7 +17,10 @@ export async function GET(req, { params }) {
   if (blocked) return blocked;
   try {
     const slot = keccak256(AbiCoder.defaultAbiCoder().encode(['uint256', 'uint256'], [tokenId, 11128]));
-    const index = BigInt(await getProvider().getStorage(TERRAFORMS_ADDRESS, slot));
+    // ?block=N pins the read to the block a migration was mined in.
+    const block = Number(new URL(req.url).searchParams.get('block'));
+    const blockTag = Number.isInteger(block) && block > 0 ? block : 'latest';
+    const index = BigInt(await getProvider().getStorage(TERRAFORMS_ADDRESS, slot, blockTag));
     return NextResponse.json({ tokenId, index: index.toString() }, { headers: { 'Cache-Control': 'no-store' } });
   } catch {
     return NextResponse.json({ error: 'failed to read renderer' }, { status: 502 });

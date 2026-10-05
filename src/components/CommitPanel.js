@@ -22,6 +22,9 @@ const SHORT_ADDRESS = `${TERRAFORMS_ADDRESS.slice(0, 6)}…${TERRAFORMS_ADDRESS.
  */
 export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
   const [stage, setStage] = useState('idle'); // idle | checking | confirm | signing | pending | done | error
+  // Whether an error came from the pre-send checks or from sending; only the
+  // former marks a checklist step as failed.
+  const [failedInChecks, setFailedInChecks] = useState(true);
   const [mode, setMode] = useState('commit'); // commit | migrate
   const [needsV2, setNeedsV2] = useState(false);
   const [steps, setSteps] = useState([]);
@@ -42,7 +45,8 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
 
   if (!walletAddress || !heightmap || tokenId == null || tokenId > 9911) return null;
 
-  const fail = (err) => {
+  const fail = (err, inChecks = true) => {
+    setFailedInChecks(inChecks);
     setStage('error');
     setNeedsV2(Boolean(err?.needsV2));
     setMessage(err instanceof CommitError ? err.message : err?.shortMessage || err?.message || String(err));
@@ -77,30 +81,38 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
       setStage('pending');
       const receipt = await tx.wait();
       if (receipt.status !== 1) throw new CommitError('The transaction was mined but reverted. Nothing changed on the parcel.');
-      if (mode === 'migrate') {
-        const check = await verifyMigrate(prepared);
-        setStage('done');
+      // The transaction is in. From here a failure is in double-checking it, not
+      // in the transaction itself, and is reported that way.
+      setMessage(`Mined in block ${receipt.blockNumber}. Checking the result on-chain…`);
+      setStage('done');
+      try {
+        if (mode === 'migrate') {
+          const check = await verifyMigrate(prepared, receipt.blockNumber);
+          setMessage(
+            check.ok
+              ? `Migrated. Parcel #${tokenId} now renders with v2 on-chain.${check.htmlCheck === 'mismatch' ? ' (The parcel\'s HTML did not match the v2 renderer\'s output on a second check — worth a look on Etherscan.)' : ''} Sites that cache artwork (OpenSea, tokens.mathcastles.xyz) can keep showing the old version until they refresh; on OpenSea use "Refresh metadata".`
+              : `The transaction succeeded, but the stored renderer for #${tokenId} reads ${check.index}, not v2. Check the parcel on Etherscan.`,
+          );
+          return;
+        }
+        const check = await verifyCommit(prepared, receipt.blockNumber);
         setMessage(
           check.ok
-            ? `Migrated. Parcel #${tokenId} now renders with v2.`
-            : `The transaction succeeded, but the read-back did not confirm v2 (renderer index ${check.index}). Check the parcel on Etherscan.`,
+            ? `Committed. Parcel #${tokenId} is now ${STATUS_NAMES[check.status]} and the chain holds exactly this heightmap.`
+            : `The transaction succeeded, but the read-back did not match (status ${STATUS_NAMES[check.status]}, canvas ${check.canvasOk ? 'matches' : 'differs'}). Check the parcel on Etherscan.`,
         );
-        return;
+      } catch (err) {
+        setMessage(
+          `The transaction succeeded (block ${receipt.blockNumber}), but the site could not double-check the result through your wallet's connection (${err?.shortMessage || err?.message || err}). Check it on Etherscan.`,
+        );
       }
-      const check = await verifyCommit(prepared);
-      setStage('done');
-      setMessage(
-        check.ok
-          ? `Committed. Parcel #${tokenId} is now ${STATUS_NAMES[check.status]} and the chain holds exactly this heightmap.`
-          : `The transaction succeeded, but the read-back did not match (status ${STATUS_NAMES[check.status]}, canvas ${check.canvasOk ? 'matches' : 'differs'}). Check the parcel on Etherscan.`,
-      );
     } catch (err) {
       // 4001 / ACTION_REJECTED: the user declined in their wallet.
       if (err?.code === 'ACTION_REJECTED' || err?.code === 4001 || err?.info?.error?.code === 4001) {
         setStage('confirm');
         return;
       }
-      fail(err);
+      fail(err, false);
     }
   };
 
@@ -136,7 +148,7 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
         </>
       )}
 
-      {(stage === 'checking' || stage === 'error') && checklist(false)}
+      {(stage === 'checking' || stage === 'error') && checklist(stage === 'error' && !failedInChecks)}
 
       {stage === 'error' && (
         <>
@@ -225,7 +237,7 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
             {message}{' '}
             <a href={ETHERSCAN_TX(txHash)} target="_blank" rel="noopener noreferrer">[etherscan ↗]</a>
           </p>
-          {mode === 'migrate' && (
+          {mode === 'migrate' && !message?.startsWith('Mined in block') && (
             <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => runChecks('commit')}>
               [continue to commit checks]
             </button>
