@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { encode, asciiViz } from '@/lib/heightmap';
 
-import { TERRAFORMS_ADDRESS } from '@/lib/contract';
+import { TERRAFORMS_ADDRESS } from '@/lib/addresses';
 
 export default function HeightmapInspector({ heightmap }) {
   const [copiedAll, setCopiedAll] = useState(false);

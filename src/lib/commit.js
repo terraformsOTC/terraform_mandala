@@ -25,7 +25,8 @@
 // deployed bytecode (checked 2026-10-04 / 2026-10-05).
 
 import { AbiCoder, BrowserProvider, Contract, keccak256 } from 'ethers';
-import { TERRAFORMS_ADDRESS, V0_RENDERER_ADDRESS, V2_RENDERER_ADDRESS } from './contract';
+import { TERRAFORMS_ADDRESS, V0_RENDERER_ADDRESS, V2_RENDERER_ADDRESS } from './addresses';
+import { STATUS_NAMES, isDreamingStatus, CommitError } from './commitShared';
 import { toCanvasUints, validate, TOTAL } from './heightmap';
 
 const MAINNET = 1n;
@@ -74,19 +75,9 @@ async function readRendererIndex(provider, id, blockTag = 'latest') {
   }
 }
 
-export const STATUS_NAMES = ['Terrain', 'Daydream', 'Terraformed', 'Origin Daydream', 'Origin Terraformed'];
-
-// The contract's gate: commitDreamToCanvas requires status % 2 == 1.
-export const isDreamingStatus = (status) => Number(status) % 2 === 1;
-
-export class CommitError extends Error {
-  constructor(message, { needsV2 = false } = {}) {
-    super(message);
-    // The commit check stopped only because the parcel is not on v2 yet; the
-    // panel offers the migration instead of a dead end.
-    this.needsV2 = needsV2;
-  }
-}
+// STATUS_NAMES, isDreamingStatus and CommitError live in ./commitShared so the
+// panel can use them without loading this module; re-exported for callers here.
+export { STATUS_NAMES, isDreamingStatus, CommitError };
 
 function walletProvider() {
   if (typeof window === 'undefined' || !window.ethereum) {

@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  CommitError, STATUS_NAMES, prepareCommit, sendCommit, verifyCommit,
-  prepareMigrate, sendMigrate, verifyMigrate,
-} from '@/lib/commit';
-import { TERRAFORMS_ADDRESS } from '@/lib/contract';
+import { CommitError, STATUS_NAMES } from '@/lib/commitShared';
+import { TERRAFORMS_ADDRESS } from '@/lib/addresses';
+
+// commit.js brings ethers with it, which most visitors never need. It loads on
+// the first [check & commit] click; by the time the user confirms it is cached.
+const loadCommit = () => import('@/lib/commit');
 
 const ETHERSCAN_TX = (hash) => `https://etherscan.io/tx/${hash}`;
 const BOX = { border: '1px solid rgba(232,232,232,0.15)' };
@@ -61,6 +62,7 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
     setTxHash(null);
     const onStep = (label) => setSteps((s) => [...s, label]);
     try {
+      const { prepareMigrate, prepareCommit } = await loadCommit();
       const result = nextMode === 'migrate'
         ? await prepareMigrate({ tokenId, account: walletAddress, onStep })
         : await prepareCommit({ tokenId, heightmap, account: walletAddress, onStep });
@@ -74,6 +76,7 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
   const confirm = async () => {
     setStage('signing');
     try {
+      const { sendMigrate, sendCommit, verifyMigrate, verifyCommit } = await loadCommit();
       const tx = mode === 'migrate'
         ? await sendMigrate(prepared, walletAddress)
         : await sendCommit(prepared, walletAddress);

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { exportGif, downloadBlob } from '@/lib/gifExporter';
+
+// The encoder (gifenc + gifExporter) loads on the first export, not with the page.
+const loadExporter = () => import('@/lib/gifExporter');
 
 export default function ExportGifButton({ animData, heightmap, tokenId }) {
   const [phase, setPhase] = useState('idle');
@@ -16,6 +18,7 @@ export default function ExportGifButton({ animData, heightmap, tokenId }) {
     setSizeKb(null);
     setError(null);
     try {
+      const { exportGif, downloadBlob } = await loadExporter();
       const result = await exportGif({
         animData,
         heightmap,
