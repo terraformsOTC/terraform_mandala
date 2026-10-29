@@ -314,9 +314,8 @@ function paramsFromUrl(searchParams) {
   const styleParam = searchParams.get('style');
   return {
     seed,
-    // algo=wheel: links from the day the wheel was a pattern of its own (2026-10-29).
-    algorithm: algo === 'wheel' ? 'rings' : ['rings', 'temple'].includes(algo) ? algo : 'classic',
-    ringStyle: algo === 'wheel' ? 'wheel' : RING_STYLES.includes(searchParams.get('ring')) ? searchParams.get('ring') : DEFAULTS.ringStyle,
+    algorithm: ['rings', 'temple'].includes(algo) ? algo : 'classic',
+    ringStyle: RING_STYLES.includes(searchParams.get('ring')) ? searchParams.get('ring') : DEFAULTS.ringStyle,
     variance: num('variance', 1, 4, DEFAULTS.variance),
     peakHeight: num('peak', 1, 9, DEFAULTS.peakHeight),
     startValue: num('start', 0, 9, DEFAULTS.startValue),

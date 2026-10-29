@@ -39,7 +39,7 @@ export const DEFAULTS = {
   ringStyle: 'concentric',
   spokeCount: 3,
   twist: 2,
-  spin: 'cw',
+  spin: 'ccw',   // #7463 turns counterclockwise
 };
 
 export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
@@ -48,9 +48,8 @@ export const RING_STYLES = ['concentric', 'wheel'];
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
   const rawAlgo = opts.algorithm;
-  // 'wheel' was briefly a pattern of its own (2026-10-29); it is now a ring style.
-  const algorithm = rawAlgo === 'wheel' ? 'rings' : ['rings', 'temple'].includes(rawAlgo) ? rawAlgo : 'classic';
-  const ringStyle = rawAlgo === 'wheel' ? 'wheel' : RING_STYLES.includes(opts.ringStyle) ? opts.ringStyle : DEFAULTS.ringStyle;
+  const algorithm = ['rings', 'temple'].includes(rawAlgo) ? rawAlgo : 'classic';
+  const ringStyle = RING_STYLES.includes(opts.ringStyle) ? opts.ringStyle : DEFAULTS.ringStyle;
   const isWheel = algorithm === 'rings' && ringStyle === 'wheel';
   const peakHeight = clampInt(opts.peakHeight ?? DEFAULTS.peakHeight, 1, 9);
   const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
@@ -823,10 +822,15 @@ function generateZiggurat(rng, terraceCount, minHeight, peakHeight) {
 // quarter run in from the rim, each at its own height and length, twist cells off
 // the radius so the wheel spins one way.
 //
+// Spin reads like a spiral galaxy's: the spokes trail the turn, so on a 'cw' wheel
+// each spoke's inner end sits clockwise of its outer end — the cross and the seeded
+// spokes alike. #7463 turns 'ccw' (the default). 'ccw' is drawn as the mirror image
+// of 'cw'.
+//
 // The only pattern without mirror axes: a wheel that spins has 4-fold ROTATIONAL
 // symmetry (90°, and so 180°) but no mirror line, as #7463 does. One quarter is
 // drawn and turned into the other three, so the symmetry is exact by construction;
-// spin 'ccw' is the mirror image, still 4-fold.
+// the mirror image is still 4-fold.
 // ───────────────────────────────────────────────────────────────────────────
 
 export const WHEEL_SPINS = ['cw', 'ccw'];
@@ -854,8 +858,9 @@ function generateWheel(rng, spokeCount, twist, spin, minHeight, peakHeight) {
   // -180°), as segments in centred coordinates with a height; turned three times.
   const quarter = [];
   const at = (deg, r) => [r * Math.cos((deg * Math.PI) / 180), r * Math.sin((deg * Math.PI) / 180)];
-  // The tallest spoke runs straight up, half a cell left of the vertical axis.
-  quarter.push({ a: [-0.5, -c], b: [-0.5, -(hubR + 0.5)], h: hi });
+  // The tallest spoke runs straight up, half a cell clockwise (right) of the vertical
+  // axis, so the cross trails the turn the same way the seeded spokes do.
+  quarter.push({ a: [0.5, -c], b: [0.5, -(hubR + 0.5)], h: hi });
   // A thin diagonal spoke from the corner in to three quarters of the rim radius.
   const diagH = clamp(lo + span * 0.55);
   quarter.push({ a: [-c + 0.5, -c + 0.5], b: at(-135, rimR * 0.75), h: diagH });

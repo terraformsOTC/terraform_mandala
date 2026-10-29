@@ -198,7 +198,7 @@ export default function MandalaControls({ params, onChange }) {
               style={{ opacity: params.spin === 'cw' ? 1 : 0.5 }}
               onClick={() => update({ spin: 'cw' })}
             >
-              as #7463
+              clockwise
             </button>
             <button
               type="button"
@@ -206,7 +206,7 @@ export default function MandalaControls({ params, onChange }) {
               style={{ opacity: params.spin === 'ccw' ? 1 : 0.5 }}
               onClick={() => update({ spin: 'ccw' })}
             >
-              mirrored
+              counterclockwise
             </button>
           </div>
         </Field>
