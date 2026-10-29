@@ -1,7 +1,7 @@
 'use client';
 
 import { randomSeed } from '@/lib/seedrandom';
-import { randomHorusHeights } from '@/lib/mandala';
+import { haloRoom } from '@/lib/mandala';
 
 export default function MandalaControls({ params, onChange }) {
   const update = (patch) => onChange({ ...params, ...patch });
@@ -87,24 +87,6 @@ export default function MandalaControls({ params, onChange }) {
             <Slider label="line height" value={params.horusLine} min={0} max={9} onChange={(horusLine) => update({ horusLine })} />
             <Slider label="edge height" value={params.horusEdge} min={0} max={9} onChange={(horusEdge) => update({ horusEdge })} />
             <Slider label="ground height" value={params.horusGround} min={0} max={9} onChange={(horusGround) => update({ horusGround })} />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="btn-primary btn-sm text-sm flex-1"
-                onClick={() => update(randomHorusHeights())}
-                title="random line, edge and ground heights"
-              >
-                ⚄ shuffle heights
-              </button>
-              <button
-                type="button"
-                className="btn-primary btn-sm text-sm flex-1"
-                onClick={() => update({ horusLine: 9, horusEdge: 6, horusGround: 0 })}
-                title="the heights of the original dream"
-              >
-                as dreamt
-              </button>
-            </div>
           </>
         )}
 
@@ -156,12 +138,13 @@ export default function MandalaControls({ params, onChange }) {
           </>
         )}
 
+        {/* One ring per step from the line height toward the ground: as many as fit. */}
         {isHorus && (
           <Slider
             label="halo"
-            value={params.halo}
+            value={Math.min(params.halo, haloRoom(params.horusLine, params.horusGround))}
             min={0}
-            max={3}
+            max={haloRoom(params.horusLine, params.horusGround)}
             onChange={(halo) => update({ halo })}
           />
         )}

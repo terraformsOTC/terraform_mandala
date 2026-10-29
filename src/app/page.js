@@ -7,7 +7,7 @@ import ParcelGrid from '@/components/ParcelGrid';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
-import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, HORUS_EYES } from '@/lib/mandala';
+import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, HORUS_EYES, HALO_MAX } from '@/lib/mandala';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
@@ -355,7 +355,7 @@ function paramsFromUrl(searchParams) {
     horusEdge: num('edge', 0, 9, DEFAULTS.horusEdge),
     horusGround: num('ground', 0, 9, DEFAULTS.horusGround),
     eye: HORUS_EYES.includes(searchParams.get('eye')) ? searchParams.get('eye') : DEFAULTS.eye,
-    halo: num('halo', 0, 3, DEFAULTS.halo),
+    halo: num('halo', 0, HALO_MAX, DEFAULTS.halo),
     grain: num('grain', 0, 3, DEFAULTS.grain),
   };
 }
