@@ -7,11 +7,11 @@ import ParcelGrid from '@/components/ParcelGrid';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
-import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, HORUS_RELIEFS } from '@/lib/mandala';
+import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, HORUS_EYES } from '@/lib/mandala';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'relief', 'grain', 'renderer',
+  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'line', 'edge', 'ground', 'eye', 'halo', 'grain', 'renderer',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -183,7 +183,11 @@ function HomeInner() {
     if (params.spokeCount !== DEFAULTS.spokeCount) next.set('spokes', String(params.spokeCount));
     if (params.twist !== DEFAULTS.twist) next.set('twist', String(params.twist));
     if (params.spin !== DEFAULTS.spin) next.set('spin', params.spin);
-    if (params.relief !== DEFAULTS.relief) next.set('relief', params.relief);
+    if (params.horusLine !== DEFAULTS.horusLine) next.set('line', String(params.horusLine));
+    if (params.horusEdge !== DEFAULTS.horusEdge) next.set('edge', String(params.horusEdge));
+    if (params.horusGround !== DEFAULTS.horusGround) next.set('ground', String(params.horusGround));
+    if (params.eye !== DEFAULTS.eye) next.set('eye', params.eye);
+    if (params.halo !== DEFAULTS.halo) next.set('halo', String(params.halo));
     if (params.grain !== DEFAULTS.grain) next.set('grain', String(params.grain));
     if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
     const qs = next.toString();
@@ -347,7 +351,11 @@ function paramsFromUrl(searchParams) {
     spokeCount: num('spokes', 1, 5, DEFAULTS.spokeCount),
     twist: num('twist', 0, 5, DEFAULTS.twist),
     spin: WHEEL_SPINS.includes(searchParams.get('spin')) ? searchParams.get('spin') : DEFAULTS.spin,
-    relief: HORUS_RELIEFS.includes(searchParams.get('relief')) ? searchParams.get('relief') : DEFAULTS.relief,
+    horusLine: num('line', 0, 9, DEFAULTS.horusLine),
+    horusEdge: num('edge', 0, 9, DEFAULTS.horusEdge),
+    horusGround: num('ground', 0, 9, DEFAULTS.horusGround),
+    eye: HORUS_EYES.includes(searchParams.get('eye')) ? searchParams.get('eye') : DEFAULTS.eye,
+    halo: num('halo', 0, 3, DEFAULTS.halo),
     grain: num('grain', 0, 3, DEFAULTS.grain),
   };
 }

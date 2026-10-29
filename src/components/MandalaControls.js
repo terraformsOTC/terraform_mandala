@@ -1,6 +1,7 @@
 'use client';
 
 import { randomSeed } from '@/lib/seedrandom';
+import { randomHorusHeights } from '@/lib/mandala';
 
 export default function MandalaControls({ params, onChange }) {
   const update = (patch) => onChange({ ...params, ...patch });
@@ -61,20 +62,51 @@ export default function MandalaControls({ params, onChange }) {
       </Field>
 
       <div className="flex flex-col gap-2">
-        <Slider
-          label="peak height"
-          value={params.peakHeight}
-          min={1}
-          max={9}
-          onChange={(peakHeight) => update({ peakHeight })}
-        />
-        <Slider
-          label="min height"
-          value={params.minHeight}
-          min={0}
-          max={Math.max(0, params.peakHeight - 1)}
-          onChange={(minHeight) => update({ minHeight })}
-        />
+        {/* The eye sets its own three heights below; peak and min do not apply to it. */}
+        {!isHorus && (
+          <>
+            <Slider
+              label="peak height"
+              value={params.peakHeight}
+              min={1}
+              max={9}
+              onChange={(peakHeight) => update({ peakHeight })}
+            />
+            <Slider
+              label="min height"
+              value={params.minHeight}
+              min={0}
+              max={Math.max(0, params.peakHeight - 1)}
+              onChange={(minHeight) => update({ minHeight })}
+            />
+          </>
+        )}
+
+        {isHorus && (
+          <>
+            <Slider label="line height" value={params.horusLine} min={0} max={9} onChange={(horusLine) => update({ horusLine })} />
+            <Slider label="edge height" value={params.horusEdge} min={0} max={9} onChange={(horusEdge) => update({ horusEdge })} />
+            <Slider label="ground height" value={params.horusGround} min={0} max={9} onChange={(horusGround) => update({ horusGround })} />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn-primary btn-sm text-sm flex-1"
+                onClick={() => update(randomHorusHeights())}
+                title="random line, edge and ground heights"
+              >
+                ⚄ shuffle heights
+              </button>
+              <button
+                type="button"
+                className="btn-primary btn-sm text-sm flex-1"
+                onClick={() => update({ horusLine: 9, horusEdge: 6, horusGround: 0 })}
+                title="the heights of the original dream"
+              >
+                as dreamt
+              </button>
+            </div>
+          </>
+        )}
 
         {isClassic && (
           <>
@@ -122,6 +154,16 @@ export default function MandalaControls({ params, onChange }) {
               onChange={(twist) => update({ twist })}
             />
           </>
+        )}
+
+        {isHorus && (
+          <Slider
+            label="halo"
+            value={params.halo}
+            min={0}
+            max={3}
+            onChange={(halo) => update({ halo })}
+          />
         )}
 
         {isHorus && (
@@ -210,23 +252,24 @@ export default function MandalaControls({ params, onChange }) {
       )}
 
       {isHorus && (
-        <Field label="relief">
+        <Field label="eye">
           <div className="flex gap-2">
             <button
               type="button"
               className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.relief === 'raised' ? 1 : 0.5 }}
-              onClick={() => update({ relief: 'raised' })}
+              style={{ opacity: params.eye === 'horus' ? 1 : 0.5 }}
+              onClick={() => update({ eye: 'horus' })}
             >
-              raised
+              horus
             </button>
             <button
               type="button"
               className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.relief === 'carved' ? 1 : 0.5 }}
-              onClick={() => update({ relief: 'carved' })}
+              style={{ opacity: params.eye === 'ra' ? 1 : 0.5 }}
+              onClick={() => update({ eye: 'ra' })}
+              title="the mirror image: the Eye of Ra faces the other way"
             >
-              carved
+              ra
             </button>
           </div>
         </Field>

@@ -21,8 +21,8 @@ import { validate } from './heightmap.js';
 //               spokes set off the radius. 4-fold ROTATIONAL symmetry only, no
 //               mirror axis (see generateWheel).
 //   rings/horus — the Eye of Horus heightmap dreamt by 0x1a86…a0cb, copied
-//               line for line; the knobs change its heights, never its lines
-//               (see generateHorus).
+//               line for line; its three heights (lines, edges, ground) are
+//               set freely, its lines never move (see generateHorus).
 //
 // terraceCount drives complexity for the three temple variants. seed is the
 // RNG input via mulberry32+FNV-1a; identical seed → identical output.
@@ -41,7 +41,11 @@ export const DEFAULTS = {
   terraceCount: 5,
   templeStyle: 'wat',
   ringStyle: 'concentric',
-  relief: 'raised',
+  horusLine: 9,     // the dream's own heights: lines 9, their edges 6, ground 0
+  horusEdge: 6,
+  horusGround: 0,
+  eye: 'horus',      // 'ra' is the mirror image
+  halo: 0,
   grain: 0,
   spokeCount: 3,
   twist: 2,
@@ -50,7 +54,7 @@ export const DEFAULTS = {
 
 export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
 export const RING_STYLES = ['concentric', 'wheel', 'horus'];
-export const HORUS_RELIEFS = ['raised', 'carved'];
+export const HORUS_EYES = ['horus', 'ra'];
 
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
@@ -70,14 +74,18 @@ export function generateMandala(opts = {}) {
   const spokeCount = clampInt(opts.spokeCount ?? DEFAULTS.spokeCount, 1, 5);
   const twist = clampInt(opts.twist ?? DEFAULTS.twist, 0, 5);
   const spin = WHEEL_SPINS.includes(opts.spin) ? opts.spin : DEFAULTS.spin;
-  const relief = HORUS_RELIEFS.includes(opts.relief) ? opts.relief : DEFAULTS.relief;
+  const horusLine = clampInt(opts.horusLine ?? DEFAULTS.horusLine, 0, 9);
+  const horusEdge = clampInt(opts.horusEdge ?? DEFAULTS.horusEdge, 0, 9);
+  const horusGround = clampInt(opts.horusGround ?? DEFAULTS.horusGround, 0, 9);
+  const eye = HORUS_EYES.includes(opts.eye) ? opts.eye : DEFAULTS.eye;
+  const halo = clampInt(opts.halo ?? DEFAULTS.halo, 0, 3);
   const grain = clampInt(opts.grain ?? DEFAULTS.grain, 0, 3);
 
   const rng = makeRng(seed);
 
   let grid;
   if (isHorus) {
-    grid = generateHorus(rng, relief, grain, minHeight, peakHeight);
+    grid = generateHorus(rng, horusLine, horusEdge, horusGround, grain, eye, halo);
   } else if (isWheel) {
     grid = generateWheel(rng, spokeCount, twist, spin, minHeight, peakHeight);
   } else if (algorithm === 'rings') {
@@ -949,11 +957,15 @@ export function isFourFold(hm) {
 // Horus, a ring style: the Eye of Horus heightmap dreamt by
 // 0x1a86c1b2727cb9f5f077b47314312bb036f1a0cb (terraformexplorer.xyz/heightmaps/
 // a0488f38…d940), copied cell for cell (James, 2026-10-29). It is drawn in three
-// heights — 9 the lines, 6 their soft edges, 0 the ground — and the knobs only
-// re-height those, never move a line: peak and min height set the line and the
-// ground (9 and 0 give the dream exactly), relief 'carved' swaps them so the eye is
-// cut into a raised ground, and grain (0-3, seeded) speckles the ground alone,
-// kept short of the edge height so the lines stay clean. No symmetry: it is a copy.
+// heights — 9 the lines, 6 their soft edges, 0 the ground — and each is set freely
+// (line, edge, ground: 9/6/0 is the dream exactly); the lines never move. Dreams of
+// the same eye use other heights — lines 3 with edges 4 over grounds of 0, 1 or 6 —
+// so edges may sit above the lines and the ground above both (the eye cut in).
+// randomHorusHeights deals a set in that spirit. Eye 'ra' is the mirror image (the
+// Eye of Ra faces the other way). Halo (0-3 cells) lifts the ground around the
+// lines one step toward them — halfway to the edge height, never onto the line or
+// edge height. Grain (0-3, seeded) speckles the remaining ground alone, never onto
+// the line or edge height, so the eye stays clean. No symmetry: it is a copy.
 // ───────────────────────────────────────────────────────────────────────────
 
 const HORUS_DREAM = [
@@ -991,26 +1003,50 @@ const HORUS_DREAM = [
   '00000000000000000000009999999900',
 ].join('');
 
-function generateHorus(rng, relief, grain, minHeight, peakHeight) {
-  const lo = minHeight, hi = peakHeight;
-  const span = hi - lo;
-  const carved = relief === 'carved';
-  const line = carved ? lo : hi;
-  const ground = carved ? hi : lo;
-  const edge = Math.round(carved ? lo + span / 3 : lo + (span * 2) / 3);
+function generateHorus(rng, line, edge, ground, grain, eye = 'horus', halo = 0) {
+  const code = (i, j) => HORUS_DREAM[i * SIDE + (eye === 'ra' ? SIDE - 1 - j : j)];
+  // Heights the ground may speckle to: within `grain` of it, never the line or edge height.
+  const speckle = [];
+  for (let v = Math.max(0, ground - grain); v <= Math.min(9, ground + grain); v++) {
+    if (v !== line && v !== edge) speckle.push(v);
+  }
+  // The halo's height: from the ground toward the lines, halfway to the edge height
+  // (at least one step), stepping back toward the ground if that lands on the line
+  // or edge height. Equal to the ground means there is no room for one.
+  const toward = Math.sign(line - ground) || 1;
+  let haloH = ground + toward * Math.max(1, Math.round(Math.abs(edge - ground) / 2));
+  while (haloH !== ground && (haloH === line || haloH === edge || haloH < 0 || haloH > 9)) haloH -= toward;
+  const nearLine = (i, j) => {
+    for (let a = Math.max(0, i - halo); a <= Math.min(SIDE - 1, i + halo); a++) {
+      for (let b = Math.max(0, j - halo); b <= Math.min(SIDE - 1, j + halo); b++) {
+        if (code(a, b) !== '0') return true;
+      }
+    }
+    return false;
+  };
   const grid = Array.from({ length: SIDE }, () => new Array(SIDE));
   for (let i = 0; i < SIDE; i++) {
     for (let j = 0; j < SIDE; j++) {
-      const c = HORUS_DREAM[i * SIDE + j];
+      const c = code(i, j);
       let v = c === '9' ? line : c === '6' ? edge : ground;
-      if (c === '0' && grain > 0) {
-        const r = Math.floor(rng() * (grain + 1));
-        // Stay strictly on the ground's side of the edge height.
-        v = carved ? Math.max(edge + 1, ground - r) : Math.min(edge - 1, ground + r);
-        v = Math.max(lo, Math.min(hi, v));
+      if (c === '0') {
+        if (halo > 0 && nearLine(i, j)) v = haloH;
+        else if (grain > 0 && speckle.length) v = speckle[Math.floor(rng() * speckle.length)];
       }
       grid[i][j] = String(v);
     }
   }
   return grid;
+}
+
+// A random set of heights for the eye, in the spirit of its dreams: lines and
+// ground at least 2 apart (either may be higher), edges 1-3 off the lines and never
+// on the ground.
+export function randomHorusHeights(rng = Math.random) {
+  const pick = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+  let line, ground;
+  do { line = pick(1, 9); ground = pick(0, 9); } while (Math.abs(line - ground) < 2);
+  let edge;
+  do { edge = line + (rng() < 0.5 ? -1 : 1) * pick(1, 3); } while (edge < 0 || edge > 9 || edge === ground);
+  return { horusLine: line, horusEdge: edge, horusGround: ground };
 }
