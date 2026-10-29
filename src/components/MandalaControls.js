@@ -7,7 +7,7 @@ export default function MandalaControls({ params, onChange }) {
   const isClassic = params.algorithm === 'classic';
   const isRings = params.algorithm === 'rings';
   const isTemple = params.algorithm === 'temple';
-  const isWheel = params.algorithm === 'wheel';
+  const isWheel = isRings && params.ringStyle === 'wheel';
 
   return (
     <div className="flex flex-col gap-4">
@@ -56,15 +56,6 @@ export default function MandalaControls({ params, onChange }) {
           >
             temple
           </button>
-          <button
-            type="button"
-            className="btn-primary btn-sm text-sm flex-1"
-            style={{ opacity: isWheel ? 1 : 0.5 }}
-            onClick={() => update({ algorithm: 'wheel' })}
-            title="after parcel #7463: a spoked wheel, 4-fold rotational symmetry"
-          >
-            wheel
-          </button>
         </div>
       </Field>
 
@@ -103,7 +94,7 @@ export default function MandalaControls({ params, onChange }) {
           </>
         )}
 
-        {isRings && (
+        {isRings && !isWheel && (
           <Slider
             label="ring count"
             value={params.ringCount}
@@ -169,6 +160,30 @@ export default function MandalaControls({ params, onChange }) {
               onClick={() => update({ rotationalOrder: 8 })}
             >
               8-fold
+            </button>
+          </div>
+        </Field>
+      )}
+
+      {isRings && (
+        <Field label="ring style">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: !isWheel ? 1 : 0.5 }}
+              onClick={() => update({ ringStyle: 'concentric' })}
+            >
+              concentric
+            </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: isWheel ? 1 : 0.5 }}
+              onClick={() => update({ ringStyle: 'wheel' })}
+              title="after parcel #7463: a spoked wheel, 4-fold rotational symmetry"
+            >
+              wheel
             </button>
           </div>
         </Field>

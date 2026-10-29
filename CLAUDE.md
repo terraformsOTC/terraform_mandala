@@ -23,7 +23,7 @@ Terraforms contract: `0x4E1f41613c9084FdB9E34E11fAE9412427480e56`.
 ## Key files
 
 ### Libraries (`src/lib/`)
-- `mandala.js` — `generateMandala(params)` → `{ heightmap, grid }` for the patterns classic (port of d3l33t's mandala-gen2.js), rings, temple (cathedral / wat / ziggurat) and **wheel** (added 2026-10-29, after parcel #7463's dream: hub, cone, a turning cross and `spokeCount` seeded spokes set `twist` cells off the radius; `spin` 'cw' = as #7463, 'ccw' = mirrored). Throws if the output isn't symmetric: D2 (both mirror axes + 180°) for every pattern except wheel, which is 4-fold **rotational** with no mirror axis (`isFourFold`) — a spinning wheel has none; one quarter is drawn and turned into the other three, so it is exact by construction.
+- `mandala.js` — `generateMandala(params)` → `{ heightmap, grid }` for the patterns classic (port of d3l33t's mandala-gen2.js), rings (`ringStyle`: concentric, or **wheel** — added 2026-10-29 after parcel #7463's dream: hub, cone, a turning cross and `spokeCount` seeded spokes set `twist` cells off the radius; `spin` 'cw' = as #7463, 'ccw' = mirrored; a pattern of its own for a few hours, so `algorithm: 'wheel'` / `algo=wheel` still map to rings + wheel) and temple (cathedral / wat / ziggurat). While the wheel is selected the footer credits 0x8477…87a2 (terraformexplorer.xyz/dreamers), the first wallet to commit such a heightmap on-chain (James, 2026-10-29). Throws if the output isn't symmetric: D2 (both mirror axes + 180°) for every pattern except the wheel, which is 4-fold **rotational** with no mirror axis (`isFourFold`) — a spinning wheel has none; one quarter is drawn and turned into the other three, so it is exact by construction.
 - `heightmap.js` — port of `initial context import files/heightmap_validate.py`. `validate`, `encode` (→ 16 decimal digit strings), `toCanvasUints` (→ BigInt[16] for the contract), `asciiViz`.
 - `commit.js` — the one on-chain write: `prepareCommit` (all pre-send checks), `sendCommit`, `verifyCommit`. See "Onchain actions".
 - `seedrandom.js` — vendored mulberry32 + FNV-1a string hash. No npm dep.
@@ -49,7 +49,7 @@ phase: idle → walletConnected → parcelSelected
 walletAddress, parcels, selectedTokenId, animData, params, error
 ```
 
-Knob changes update `params`, which trigger a memo'd `generateMandala()` and update the URL via `history.replaceState`. URL params: `?token=<id>&seed=<str>&variance=<1-4>&peak=<1-9>&start=<0-9>&order=<2|4|8>&min=<0-9>&algo=<classic|rings|temple|wheel>&rings=<2-20>&terraces=<2-12>&style=<cathedral|wat|ziggurat>&spokes=<1-5>&twist=<0-5>&spin=<cw|ccw>&renderer=<v0|v2>`. Only non-default values are written to the URL, so a missing parameter must read as its default (`paramsFromUrl`'s `num` — until 2026-10-29 it read as 0, which opened every link at start value 0).
+Knob changes update `params`, which trigger a memo'd `generateMandala()` and update the URL via `history.replaceState`. URL params: `?token=<id>&seed=<str>&variance=<1-4>&peak=<1-9>&start=<0-9>&order=<2|4|8>&min=<0-9>&algo=<classic|rings|temple>&ring=<concentric|wheel>&rings=<2-20>&terraces=<2-12>&style=<cathedral|wat|ziggurat>&spokes=<1-5>&twist=<0-5>&spin=<cw|ccw>&renderer=<v0|v2>`. Only non-default values are written to the URL, so a missing parameter must read as its default (`paramsFromUrl`'s `num` — until 2026-10-29 it read as 0, which opened every link at start value 0).
 
 `accountsChanged` listener mirrors the Estimator's pattern.
 

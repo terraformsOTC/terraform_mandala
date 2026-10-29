@@ -256,6 +256,7 @@ export function defaultParams() {
     ringCount: DEFAULTS.ringCount,
     terraceCount: DEFAULTS.terraceCount,
     templeStyle: DEFAULTS.templeStyle,
+    ringStyle: DEFAULTS.ringStyle,
     spokeCount: DEFAULTS.spokeCount,
     twist: DEFAULTS.twist,
     spin: DEFAULTS.spin,

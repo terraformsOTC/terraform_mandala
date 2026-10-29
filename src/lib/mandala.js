@@ -1,14 +1,14 @@
 import { makeRng } from './seedrandom.js';
 import { validate } from './heightmap.js';
 
-// 32x32 symmetric heightmap generator. Every pattern but wheel is D2-symmetric
-// (horizontal + vertical mirror axes, 180° rotation); wheel is 4-fold rotational
-// (90° and 180°) with no mirror axis. The check runs before return.
+// 32x32 symmetric heightmap generator. Every pattern but the wheel is D2-symmetric
+// (horizontal + vertical mirror axes, 180° rotation); the wheel (a ring style) is
+// 4-fold rotational (90° and 180°) with no mirror axis. The check runs before return.
 //
-// Six generators are dispatched from generateMandala(opts):
+// The generators dispatched from generateMandala(opts):
 //   classic   — port of d3l33t's mandala-gen2.js (a seeded random walk on one
 //               quadrant, mirrored). rotationalOrder picks 2/4/8-fold variant.
-//   rings     — concentric Euclidean rings, per-ring height is a uniform draw.
+//   rings/concentric — concentric Euclidean rings, per-ring height is a uniform draw.
 //   temple/cathedral — Greek-cross plan, central crossing spire, gabled arms
 //               with rib bays, pinnacle clusters, arm-tip turrets, flying
 //               buttresses, cloister + precinct walls.
@@ -16,9 +16,9 @@ import { validate } from './heightmap.js';
 //               naga balustrade rhythm, cardinal causeways, outer enclosure.
 //   temple/ziggurat — stacked Chebyshev tiers with multi-scale recessed niches,
 //               corner buttresses, cardinal staircases, top shrine, precinct.
-//   wheel     — after parcel #7463: hub, cone, a turning cross and seeded spokes
-//               set off the radius. 4-fold ROTATIONAL symmetry only — the one
-//               pattern without mirror axes (see generateWheel).
+//   rings/wheel — after parcel #7463: hub, cone, a turning cross and seeded
+//               spokes set off the radius. 4-fold ROTATIONAL symmetry only — the
+//               one pattern without mirror axes (see generateWheel).
 //
 // terraceCount drives complexity for the three temple variants. seed is the
 // RNG input via mulberry32+FNV-1a; identical seed → identical output.
@@ -36,17 +36,22 @@ export const DEFAULTS = {
   ringCount: 10,
   terraceCount: 5,
   templeStyle: 'wat',
+  ringStyle: 'concentric',
   spokeCount: 3,
   twist: 2,
   spin: 'cw',
 };
 
 export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
+export const RING_STYLES = ['concentric', 'wheel'];
 
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
   const rawAlgo = opts.algorithm;
-  const algorithm = ['rings', 'temple', 'wheel'].includes(rawAlgo) ? rawAlgo : 'classic';
+  // 'wheel' was briefly a pattern of its own (2026-10-29); it is now a ring style.
+  const algorithm = rawAlgo === 'wheel' ? 'rings' : ['rings', 'temple'].includes(rawAlgo) ? rawAlgo : 'classic';
+  const ringStyle = rawAlgo === 'wheel' ? 'wheel' : RING_STYLES.includes(opts.ringStyle) ? opts.ringStyle : DEFAULTS.ringStyle;
+  const isWheel = algorithm === 'rings' && ringStyle === 'wheel';
   const peakHeight = clampInt(opts.peakHeight ?? DEFAULTS.peakHeight, 1, 9);
   const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
   const variance = clampInt(opts.variance ?? DEFAULTS.variance, 1, 4);
@@ -62,10 +67,10 @@ export function generateMandala(opts = {}) {
   const rng = makeRng(seed);
 
   let grid;
-  if (algorithm === 'rings') {
-    grid = generateRings(rng, ringCount, minHeight, peakHeight);
-  } else if (algorithm === 'wheel') {
+  if (isWheel) {
     grid = generateWheel(rng, spokeCount, twist, spin, minHeight, peakHeight);
+  } else if (algorithm === 'rings') {
+    grid = generateRings(rng, ringCount, minHeight, peakHeight);
   } else if (algorithm === 'temple') {
     if (templeStyle === 'cathedral') {
       grid = generateCathedral(rng, terraceCount, minHeight, peakHeight);
@@ -89,7 +94,7 @@ export function generateMandala(opts = {}) {
   const heightmap = grid.map((row) => row.join('')).join('');
 
   const v = validate(heightmap);
-  const symmetric = algorithm === 'wheel'
+  const symmetric = isWheel
     ? isFourFold(heightmap)
     : v.vertical_sym && v.horizontal_sym && v.rotational_sym;
   if (!v.lengthOk || !v.allDigits || !symmetric) {
@@ -811,7 +816,7 @@ function generateZiggurat(rng, terraceCount, minHeight, peakHeight) {
 
 
 // ───────────────────────────────────────────────────────────────────────────
-// Wheel: after parcel #7463's dream (James, 2026-10-29) — a spoked wheel seen from
+// Wheel, a ring style: after parcel #7463's dream (James, 2026-10-29) — a spoked wheel seen from
 // above. A cone falls from the hub to the rim, a low hub sits at the centre, a
 // cross of tallest spokes runs one cell off each axis (so the cross itself turns),
 // thin diagonal spokes reach in from the corners, and spokeCount seeded spokes per

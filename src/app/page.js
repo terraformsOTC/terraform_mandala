@@ -7,11 +7,11 @@ import ParcelGrid from '@/components/ParcelGrid';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
-import { DEFAULTS, TEMPLE_STYLES, WHEEL_SPINS } from '@/lib/mandala';
+import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS } from '@/lib/mandala';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'terraces', 'style', 'spokes', 'twist', 'spin', 'renderer',
+  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'renderer',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -179,6 +179,7 @@ function HomeInner() {
     if (params.ringCount !== DEFAULTS.ringCount) next.set('rings', String(params.ringCount));
     if (params.terraceCount !== DEFAULTS.terraceCount) next.set('terraces', String(params.terraceCount));
     if (params.templeStyle !== DEFAULTS.templeStyle) next.set('style', params.templeStyle);
+    if (params.ringStyle !== DEFAULTS.ringStyle) next.set('ring', params.ringStyle);
     if (params.spokeCount !== DEFAULTS.spokeCount) next.set('spokes', String(params.spokeCount));
     if (params.twist !== DEFAULTS.twist) next.set('twist', String(params.twist));
     if (params.spin !== DEFAULTS.spin) next.set('spin', params.spin);
@@ -276,8 +277,23 @@ function HomeInner() {
         )}
       </main>
 
-      <Footer />
+      <Footer note={params.algorithm === 'rings' && params.ringStyle === 'wheel' ? <WheelCredit /> : null} />
     </div>
+  );
+}
+
+// The wheel ring style is after parcel #7463's dream; credit the wallet that first
+// committed a heightmap of this kind on-chain (James, 2026-10-29).
+const WHEEL_PIONEER = '0x8477344455943b36102d01a52bda22c558fd87a2';
+function WheelCredit() {
+  return (
+    <>
+      The wheel ring style follows parcel #7463&apos;s dream. Credit to{' '}
+      <a href={`https://terraformexplorer.xyz/dreamers/${WHEEL_PIONEER}`} target="_blank" rel="noopener noreferrer">
+        {WHEEL_PIONEER.slice(0, 6)}…{WHEEL_PIONEER.slice(-4)} ↗
+      </a>
+      , the first wallet to commit this kind of heightmap to the EVM.
+    </>
   );
 }
 
@@ -298,7 +314,9 @@ function paramsFromUrl(searchParams) {
   const styleParam = searchParams.get('style');
   return {
     seed,
-    algorithm: ['rings', 'temple', 'wheel'].includes(algo) ? algo : 'classic',
+    // algo=wheel: links from the day the wheel was a pattern of its own (2026-10-29).
+    algorithm: algo === 'wheel' ? 'rings' : ['rings', 'temple'].includes(algo) ? algo : 'classic',
+    ringStyle: algo === 'wheel' ? 'wheel' : RING_STYLES.includes(searchParams.get('ring')) ? searchParams.get('ring') : DEFAULTS.ringStyle,
     variance: num('variance', 1, 4, DEFAULTS.variance),
     peakHeight: num('peak', 1, 9, DEFAULTS.peakHeight),
     startValue: num('start', 0, 9, DEFAULTS.startValue),
