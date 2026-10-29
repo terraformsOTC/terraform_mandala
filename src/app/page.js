@@ -7,11 +7,11 @@ import ParcelGrid from '@/components/ParcelGrid';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
-import { DEFAULTS, TEMPLE_STYLES } from '@/lib/mandala';
+import { DEFAULTS, TEMPLE_STYLES, WHEEL_SPINS } from '@/lib/mandala';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'terraces', 'style', 'renderer',
+  'algo', 'rings', 'terraces', 'style', 'spokes', 'twist', 'spin', 'renderer',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -179,6 +179,9 @@ function HomeInner() {
     if (params.ringCount !== DEFAULTS.ringCount) next.set('rings', String(params.ringCount));
     if (params.terraceCount !== DEFAULTS.terraceCount) next.set('terraces', String(params.terraceCount));
     if (params.templeStyle !== DEFAULTS.templeStyle) next.set('style', params.templeStyle);
+    if (params.spokeCount !== DEFAULTS.spokeCount) next.set('spokes', String(params.spokeCount));
+    if (params.twist !== DEFAULTS.twist) next.set('twist', String(params.twist));
+    if (params.spin !== DEFAULTS.spin) next.set('spin', params.spin);
     if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
     const qs = next.toString();
     const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
@@ -282,15 +285,20 @@ function paramsFromUrl(searchParams) {
   if (!searchParams) return null;
   const seed = searchParams.get('seed');
   if (!seed) return null;
+  // A parameter left out of the URL (not written when it equals the default) must
+  // fall back, not read as Number(null) === 0: that opened every link without
+  // `start` at start value 0 instead of 5.
   const num = (k, lo, hi, fallback) => {
-    const v = Number(searchParams.get(k));
+    const raw = searchParams.get(k);
+    if (raw === null || raw === '') return fallback;
+    const v = Number(raw);
     return Number.isInteger(v) && v >= lo && v <= hi ? v : fallback;
   };
   const algo = searchParams.get('algo');
   const styleParam = searchParams.get('style');
   return {
     seed,
-    algorithm: algo === 'rings' ? 'rings' : algo === 'temple' ? 'temple' : 'classic',
+    algorithm: ['rings', 'temple', 'wheel'].includes(algo) ? algo : 'classic',
     variance: num('variance', 1, 4, DEFAULTS.variance),
     peakHeight: num('peak', 1, 9, DEFAULTS.peakHeight),
     startValue: num('start', 0, 9, DEFAULTS.startValue),
@@ -299,5 +307,8 @@ function paramsFromUrl(searchParams) {
     ringCount: num('rings', 2, 20, DEFAULTS.ringCount),
     terraceCount: num('terraces', 2, 12, DEFAULTS.terraceCount),
     templeStyle: TEMPLE_STYLES.includes(styleParam) ? styleParam : DEFAULTS.templeStyle,
+    spokeCount: num('spokes', 1, 5, DEFAULTS.spokeCount),
+    twist: num('twist', 0, 5, DEFAULTS.twist),
+    spin: WHEEL_SPINS.includes(searchParams.get('spin')) ? searchParams.get('spin') : DEFAULTS.spin,
   };
 }

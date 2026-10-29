@@ -7,6 +7,7 @@ export default function MandalaControls({ params, onChange }) {
   const isClassic = params.algorithm === 'classic';
   const isRings = params.algorithm === 'rings';
   const isTemple = params.algorithm === 'temple';
+  const isWheel = params.algorithm === 'wheel';
 
   return (
     <div className="flex flex-col gap-4">
@@ -54,6 +55,15 @@ export default function MandalaControls({ params, onChange }) {
             onClick={() => update({ algorithm: 'temple' })}
           >
             temple
+          </button>
+          <button
+            type="button"
+            className="btn-primary btn-sm text-sm flex-1"
+            style={{ opacity: isWheel ? 1 : 0.5 }}
+            onClick={() => update({ algorithm: 'wheel' })}
+            title="after parcel #7463: a spoked wheel, 4-fold rotational symmetry"
+          >
+            wheel
           </button>
         </div>
       </Field>
@@ -103,6 +113,25 @@ export default function MandalaControls({ params, onChange }) {
           />
         )}
 
+        {isWheel && (
+          <>
+            <Slider
+              label="spokes per quarter"
+              value={params.spokeCount}
+              min={1}
+              max={5}
+              onChange={(spokeCount) => update({ spokeCount })}
+            />
+            <Slider
+              label="twist"
+              value={params.twist}
+              min={0}
+              max={5}
+              onChange={(twist) => update({ twist })}
+            />
+          </>
+        )}
+
         {isTemple && (
           <Slider
             label="terrace count"
@@ -140,6 +169,29 @@ export default function MandalaControls({ params, onChange }) {
               onClick={() => update({ rotationalOrder: 8 })}
             >
               8-fold
+            </button>
+          </div>
+        </Field>
+      )}
+
+      {isWheel && (
+        <Field label="spin">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.spin === 'cw' ? 1 : 0.5 }}
+              onClick={() => update({ spin: 'cw' })}
+            >
+              as #7463
+            </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.spin === 'ccw' ? 1 : 0.5 }}
+              onClick={() => update({ spin: 'ccw' })}
+            >
+              mirrored
             </button>
           </div>
         </Field>

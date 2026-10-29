@@ -1,10 +1,11 @@
 import { makeRng } from './seedrandom.js';
 import { validate } from './heightmap.js';
 
-// 32x32 symmetric heightmap generator. All outputs are D2-symmetric (horizontal
-// + vertical mirror axes, 180° rotation) and validate() must pass before return.
+// 32x32 symmetric heightmap generator. Every pattern but wheel is D2-symmetric
+// (horizontal + vertical mirror axes, 180° rotation); wheel is 4-fold rotational
+// (90° and 180°) with no mirror axis. The check runs before return.
 //
-// Five generators are dispatched from generateMandala(opts):
+// Six generators are dispatched from generateMandala(opts):
 //   classic   — port of d3l33t's mandala-gen2.js (a seeded random walk on one
 //               quadrant, mirrored). rotationalOrder picks 2/4/8-fold variant.
 //   rings     — concentric Euclidean rings, per-ring height is a uniform draw.
@@ -15,6 +16,9 @@ import { validate } from './heightmap.js';
 //               naga balustrade rhythm, cardinal causeways, outer enclosure.
 //   temple/ziggurat — stacked Chebyshev tiers with multi-scale recessed niches,
 //               corner buttresses, cardinal staircases, top shrine, precinct.
+//   wheel     — after parcel #7463: hub, cone, a turning cross and seeded spokes
+//               set off the radius. 4-fold ROTATIONAL symmetry only — the one
+//               pattern without mirror axes (see generateWheel).
 //
 // terraceCount drives complexity for the three temple variants. seed is the
 // RNG input via mulberry32+FNV-1a; identical seed → identical output.
@@ -32,6 +36,9 @@ export const DEFAULTS = {
   ringCount: 10,
   terraceCount: 5,
   templeStyle: 'wat',
+  spokeCount: 3,
+  twist: 2,
+  spin: 'cw',
 };
 
 export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
@@ -39,7 +46,7 @@ export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
   const rawAlgo = opts.algorithm;
-  const algorithm = rawAlgo === 'rings' ? 'rings' : rawAlgo === 'temple' ? 'temple' : 'classic';
+  const algorithm = ['rings', 'temple', 'wheel'].includes(rawAlgo) ? rawAlgo : 'classic';
   const peakHeight = clampInt(opts.peakHeight ?? DEFAULTS.peakHeight, 1, 9);
   const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
   const variance = clampInt(opts.variance ?? DEFAULTS.variance, 1, 4);
@@ -48,12 +55,17 @@ export function generateMandala(opts = {}) {
   const terraceCount = clampInt(opts.terraceCount ?? DEFAULTS.terraceCount, 2, 12);
   const rotationalOrder = opts.rotationalOrder === 2 ? 2 : opts.rotationalOrder === 8 ? 8 : 4;
   const templeStyle = TEMPLE_STYLES.includes(opts.templeStyle) ? opts.templeStyle : DEFAULTS.templeStyle;
+  const spokeCount = clampInt(opts.spokeCount ?? DEFAULTS.spokeCount, 1, 5);
+  const twist = clampInt(opts.twist ?? DEFAULTS.twist, 0, 5);
+  const spin = WHEEL_SPINS.includes(opts.spin) ? opts.spin : DEFAULTS.spin;
 
   const rng = makeRng(seed);
 
   let grid;
   if (algorithm === 'rings') {
     grid = generateRings(rng, ringCount, minHeight, peakHeight);
+  } else if (algorithm === 'wheel') {
+    grid = generateWheel(rng, spokeCount, twist, spin, minHeight, peakHeight);
   } else if (algorithm === 'temple') {
     if (templeStyle === 'cathedral') {
       grid = generateCathedral(rng, terraceCount, minHeight, peakHeight);
@@ -77,7 +89,10 @@ export function generateMandala(opts = {}) {
   const heightmap = grid.map((row) => row.join('')).join('');
 
   const v = validate(heightmap);
-  if (!v.lengthOk || !v.allDigits || !v.vertical_sym || !v.horizontal_sym || !v.rotational_sym) {
+  const symmetric = algorithm === 'wheel'
+    ? isFourFold(heightmap)
+    : v.vertical_sym && v.horizontal_sym && v.rotational_sym;
+  if (!v.lengthOk || !v.allDigits || !symmetric) {
     throw new Error(`generateMandala produced asymmetric output: ${JSON.stringify(v)}`);
   }
   return { heightmap, grid };
@@ -794,3 +809,114 @@ function generateZiggurat(rng, terraceCount, minHeight, peakHeight) {
 }
 
 
+
+// ───────────────────────────────────────────────────────────────────────────
+// Wheel: after parcel #7463's dream (James, 2026-10-29) — a spoked wheel seen from
+// above. A cone falls from the hub to the rim, a low hub sits at the centre, a
+// cross of tallest spokes runs one cell off each axis (so the cross itself turns),
+// thin diagonal spokes reach in from the corners, and spokeCount seeded spokes per
+// quarter run in from the rim, each at its own height and length, twist cells off
+// the radius so the wheel spins one way.
+//
+// The only pattern without mirror axes: a wheel that spins has 4-fold ROTATIONAL
+// symmetry (90°, and so 180°) but no mirror line, as #7463 does. One quarter is
+// drawn and turned into the other three, so the symmetry is exact by construction;
+// spin 'ccw' is the mirror image, still 4-fold.
+// ───────────────────────────────────────────────────────────────────────────
+
+export const WHEEL_SPINS = ['cw', 'ccw'];
+
+// The quarter-turn the wheel is built on: cell (i, j) → (j, 31 − i), which in
+// centred coordinates (x right, y down) is (x, y) → (−y, x).
+const turn = ([x, y]) => [-y, x];
+
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+function generateWheel(rng, spokeCount, twist, spin, minHeight, peakHeight) {
+  const c = (SIDE - 1) / 2;            // 15.5: the centre falls between cells
+  const lo = minHeight, hi = peakHeight;
+  const span = hi - lo;
+  const clamp = (v) => Math.max(lo, Math.min(hi, Math.round(v)));
+  const rimR = c;                       // half the side: where the cone reaches the rim
+  const hubR = 2.1;
+
+  // Spokes of one quarter (the sector from straight up, -90°, round to the left,
+  // -180°), as segments in centred coordinates with a height; turned three times.
+  const quarter = [];
+  const at = (deg, r) => [r * Math.cos((deg * Math.PI) / 180), r * Math.sin((deg * Math.PI) / 180)];
+  // The tallest spoke runs straight up, half a cell left of the vertical axis.
+  quarter.push({ a: [-0.5, -c], b: [-0.5, -(hubR + 0.5)], h: hi });
+  // A thin diagonal spoke from the corner in to three quarters of the rim radius.
+  const diagH = clamp(lo + span * 0.55);
+  quarter.push({ a: [-c + 0.5, -c + 0.5], b: at(-135, rimR * 0.75), h: diagH });
+  // Seeded spokes spread across the quarter, between the cross and the diagonal and
+  // beyond it, each off the radius by `twist` cells (the pinwheel), with its own
+  // height and inner end.
+  const used = new Set([hi, diagH]);
+  for (let k = 0; k < spokeCount; k++) {
+    const slot = (k + 0.5 + (rng() - 0.5) * 0.6) / spokeCount;   // 0..1 across the quarter
+    const deg = -98 - slot * 76;                                  // keep clear of both axes
+    let h = clamp(lo + span * (0.45 + rng() * 0.45));
+    for (let tries = 0; used.has(h) && tries < 4; tries++) h = clamp(lo + span * (0.4 + rng() * 0.5));
+    used.add(h);
+    const inner = [hubR + 1, rimR * 0.4, rimR * 0.6][Math.floor(rng() * 3)];
+    const off = twist * 0.35;                                     // cells off the radius
+    const perp = at(deg + 90, off);
+    const a = at(deg, rimR * 1.25), b = at(deg, inner);
+    quarter.push({ a: [a[0] + perp[0], a[1] + perp[1]], b: [b[0] + perp[0], b[1] + perp[1]], h });
+  }
+  // Draw low spokes first so taller ones cross over them.
+  quarter.sort((s, t) => s.h - t.h);
+  const spokes = [];
+  for (let k = 0; k < 4; k++) {
+    for (const s of quarter) {
+      let a = s.a, b = s.b;
+      for (let n = 0; n < k; n++) { a = turn(a); b = turn(b); }
+      spokes.push({ a, b, h: s.h });
+    }
+  }
+
+  // Rasterise the top-left quarter only; every other cell is a turn of one of these.
+  const q = Array.from({ length: QUADRANT }, () => new Array(QUADRANT));
+  for (let i = 0; i < QUADRANT; i++) {
+    for (let j = 0; j < QUADRANT; j++) {
+      const x = j - c, y = i - c;
+      const r = Math.hypot(x, y);
+      // Cone: highest just outside the hub, one step down every two cells, lowest
+      // past the rim (the corners).
+      let v = clamp(hi - ((r - hubR - 1) * (span - 1)) / (rimR - hubR - 1));
+      if (rng() < 0.1) v = clamp(v + (rng() < 0.5 ? -1 : 1));   // #7463's grain
+      for (const s of spokes) {
+        if (distToSegment(x, y, s.a[0], s.a[1], s.b[0], s.b[1]) <= 0.5) v = s.h;
+      }
+      if (r < hubR) v = clamp(lo + span * 0.25);                 // the hub
+      q[i][j] = v;
+    }
+  }
+
+  const grid = Array.from({ length: SIDE }, () => new Array(SIDE));
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      let a = i, b = j;
+      while (a >= QUADRANT || b >= QUADRANT) [a, b] = [31 - b, a];   // turn back into the quarter
+      grid[i][j] = String(q[a][b]);
+    }
+  }
+  return spin === 'ccw' ? grid.map((row) => [...row].reverse()) : grid;
+}
+
+// 4-fold rotational symmetry: every cell equals the one a quarter-turn away.
+export function isFourFold(hm) {
+  const s = String(hm);
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      if (s[i * SIDE + j] !== s[j * SIDE + (SIDE - 1 - i)]) return false;
+    }
+  }
+  return true;
+}
