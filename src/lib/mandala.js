@@ -1,9 +1,10 @@
 import { makeRng } from './seedrandom.js';
 import { validate } from './heightmap.js';
 
-// 32x32 symmetric heightmap generator. Every pattern but the wheel is D2-symmetric
-// (horizontal + vertical mirror axes, 180° rotation); the wheel (a ring style) is
-// 4-fold rotational (90° and 180°) with no mirror axis. The check runs before return.
+// 32x32 heightmap generator. Every pattern but two ring styles is D2-symmetric
+// (horizontal + vertical mirror axes, 180° rotation); the wheel is 4-fold
+// rotational (90° and 180°) with no mirror axis; horus is a copy of a dreamt
+// image and has no symmetry at all. The check runs before return.
 //
 // The generators dispatched from generateMandala(opts):
 //   classic   — port of d3l33t's mandala-gen2.js (a seeded random walk on one
@@ -17,8 +18,11 @@ import { validate } from './heightmap.js';
 //   temple/ziggurat — stacked Chebyshev tiers with multi-scale recessed niches,
 //               corner buttresses, cardinal staircases, top shrine, precinct.
 //   rings/wheel — after parcel #7463: hub, cone, a turning cross and seeded
-//               spokes set off the radius. 4-fold ROTATIONAL symmetry only — the
-//               one pattern without mirror axes (see generateWheel).
+//               spokes set off the radius. 4-fold ROTATIONAL symmetry only, no
+//               mirror axis (see generateWheel).
+//   rings/horus — the Eye of Horus heightmap dreamt by 0x1a86…a0cb, copied
+//               line for line; the knobs change its heights, never its lines
+//               (see generateHorus).
 //
 // terraceCount drives complexity for the three temple variants. seed is the
 // RNG input via mulberry32+FNV-1a; identical seed → identical output.
@@ -37,13 +41,16 @@ export const DEFAULTS = {
   terraceCount: 5,
   templeStyle: 'wat',
   ringStyle: 'concentric',
+  relief: 'raised',
+  grain: 0,
   spokeCount: 3,
   twist: 2,
   spin: 'ccw',   // #7463 turns counterclockwise
 };
 
 export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
-export const RING_STYLES = ['concentric', 'wheel'];
+export const RING_STYLES = ['concentric', 'wheel', 'horus'];
+export const HORUS_RELIEFS = ['raised', 'carved'];
 
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
@@ -51,6 +58,7 @@ export function generateMandala(opts = {}) {
   const algorithm = ['rings', 'temple'].includes(rawAlgo) ? rawAlgo : 'classic';
   const ringStyle = RING_STYLES.includes(opts.ringStyle) ? opts.ringStyle : DEFAULTS.ringStyle;
   const isWheel = algorithm === 'rings' && ringStyle === 'wheel';
+  const isHorus = algorithm === 'rings' && ringStyle === 'horus';
   const peakHeight = clampInt(opts.peakHeight ?? DEFAULTS.peakHeight, 1, 9);
   const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
   const variance = clampInt(opts.variance ?? DEFAULTS.variance, 1, 4);
@@ -62,11 +70,15 @@ export function generateMandala(opts = {}) {
   const spokeCount = clampInt(opts.spokeCount ?? DEFAULTS.spokeCount, 1, 5);
   const twist = clampInt(opts.twist ?? DEFAULTS.twist, 0, 5);
   const spin = WHEEL_SPINS.includes(opts.spin) ? opts.spin : DEFAULTS.spin;
+  const relief = HORUS_RELIEFS.includes(opts.relief) ? opts.relief : DEFAULTS.relief;
+  const grain = clampInt(opts.grain ?? DEFAULTS.grain, 0, 3);
 
   const rng = makeRng(seed);
 
   let grid;
-  if (isWheel) {
+  if (isHorus) {
+    grid = generateHorus(rng, relief, grain, minHeight, peakHeight);
+  } else if (isWheel) {
     grid = generateWheel(rng, spokeCount, twist, spin, minHeight, peakHeight);
   } else if (algorithm === 'rings') {
     grid = generateRings(rng, ringCount, minHeight, peakHeight);
@@ -93,7 +105,9 @@ export function generateMandala(opts = {}) {
   const heightmap = grid.map((row) => row.join('')).join('');
 
   const v = validate(heightmap);
-  const symmetric = isWheel
+  const symmetric = isHorus
+    ? true   // a copy of a dreamt image: no symmetry to check
+    : isWheel
     ? isFourFold(heightmap)
     : v.vertical_sym && v.horizontal_sym && v.rotational_sym;
   if (!v.lengthOk || !v.allDigits || !symmetric) {
@@ -929,4 +943,74 @@ export function isFourFold(hm) {
     }
   }
   return true;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Horus, a ring style: the Eye of Horus heightmap dreamt by
+// 0x1a86c1b2727cb9f5f077b47314312bb036f1a0cb (terraformexplorer.xyz/heightmaps/
+// a0488f38…d940), copied cell for cell (James, 2026-10-29). It is drawn in three
+// heights — 9 the lines, 6 their soft edges, 0 the ground — and the knobs only
+// re-height those, never move a line: peak and min height set the line and the
+// ground (9 and 0 give the dream exactly), relief 'carved' swaps them so the eye is
+// cut into a raised ground, and grain (0-3, seeded) speckles the ground alone,
+// kept short of the edge height so the lines stay clean. No symmetry: it is a copy.
+// ───────────────────────────────────────────────────────────────────────────
+
+const HORUS_DREAM = [
+  '00000000000000066000000000000000',
+  '00000000000999999999900000000000',
+  '00000006999999999999999900000000',
+  '00000099990000000000099999000000',
+  '00000999000000000000000099990000',
+  '00099900000000000000000000999000',
+  '00990000000000000000000000009900',
+  '00900000006699999900000000000000',
+  '09000000069999999999999000000000',
+  '60000000999999999999999900000000',
+  '00000009999099999000069999000000',
+  '00000999900099999900000099900000',
+  '00999990000099999900000000990000',
+  '69990000000099999900000000099900',
+  '00996000000099999900000000990900',
+  '00069990000009999000000099900000',
+  '00000999999000990000999990000000',
+  '00000009999999999999990000000000',
+  '00000009999990690000000000000000',
+  '00000009999990000000000000000000',
+  '00000009600999000000000000000000',
+  '00000009000999000000000000000000',
+  '00000099000099000000000000999000',
+  '00000699000009900000000099969990',
+  '00000099000009990000000090000099',
+  '00000009000000996000000990000009',
+  '00000009000000099000000990090009',
+  '00000009000000009990000090090009',
+  '00000009000000000099000009900009',
+  '00000009000000000009990000000099',
+  '00000000000000000009999900009990',
+  '00000000000000000000009999999900',
+].join('');
+
+function generateHorus(rng, relief, grain, minHeight, peakHeight) {
+  const lo = minHeight, hi = peakHeight;
+  const span = hi - lo;
+  const carved = relief === 'carved';
+  const line = carved ? lo : hi;
+  const ground = carved ? hi : lo;
+  const edge = Math.round(carved ? lo + span / 3 : lo + (span * 2) / 3);
+  const grid = Array.from({ length: SIDE }, () => new Array(SIDE));
+  for (let i = 0; i < SIDE; i++) {
+    for (let j = 0; j < SIDE; j++) {
+      const c = HORUS_DREAM[i * SIDE + j];
+      let v = c === '9' ? line : c === '6' ? edge : ground;
+      if (c === '0' && grain > 0) {
+        const r = Math.floor(rng() * (grain + 1));
+        // Stay strictly on the ground's side of the edge height.
+        v = carved ? Math.max(edge + 1, ground - r) : Math.min(edge - 1, ground + r);
+        v = Math.max(lo, Math.min(hi, v));
+      }
+      grid[i][j] = String(v);
+    }
+  }
+  return grid;
 }

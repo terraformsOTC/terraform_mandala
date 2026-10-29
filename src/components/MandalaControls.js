@@ -8,6 +8,7 @@ export default function MandalaControls({ params, onChange }) {
   const isRings = params.algorithm === 'rings';
   const isTemple = params.algorithm === 'temple';
   const isWheel = isRings && params.ringStyle === 'wheel';
+  const isHorus = isRings && params.ringStyle === 'horus';
 
   return (
     <div className="flex flex-col gap-4">
@@ -94,7 +95,7 @@ export default function MandalaControls({ params, onChange }) {
           </>
         )}
 
-        {isRings && !isWheel && (
+        {isRings && !isWheel && !isHorus && (
           <Slider
             label="ring count"
             value={params.ringCount}
@@ -121,6 +122,16 @@ export default function MandalaControls({ params, onChange }) {
               onChange={(twist) => update({ twist })}
             />
           </>
+        )}
+
+        {isHorus && (
+          <Slider
+            label="grain"
+            value={params.grain}
+            min={0}
+            max={3}
+            onChange={(grain) => update({ grain })}
+          />
         )}
 
         {isTemple && (
@@ -171,7 +182,7 @@ export default function MandalaControls({ params, onChange }) {
             <button
               type="button"
               className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: !isWheel ? 1 : 0.5 }}
+              style={{ opacity: !isWheel && !isHorus ? 1 : 0.5 }}
               onClick={() => update({ ringStyle: 'concentric' })}
             >
               concentric
@@ -185,6 +196,38 @@ export default function MandalaControls({ params, onChange }) {
             >
               wheel
             </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: isHorus ? 1 : 0.5 }}
+              onClick={() => update({ ringStyle: 'horus' })}
+              title="the Eye of Horus, copied from a dreamt heightmap"
+            >
+              horus
+            </button>
+          </div>
+        </Field>
+      )}
+
+      {isHorus && (
+        <Field label="relief">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.relief === 'raised' ? 1 : 0.5 }}
+              onClick={() => update({ relief: 'raised' })}
+            >
+              raised
+            </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.relief === 'carved' ? 1 : 0.5 }}
+              onClick={() => update({ relief: 'carved' })}
+            >
+              carved
+            </button>
           </div>
         </Field>
       )}
@@ -195,18 +238,18 @@ export default function MandalaControls({ params, onChange }) {
             <button
               type="button"
               className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.spin === 'cw' ? 1 : 0.5 }}
-              onClick={() => update({ spin: 'cw' })}
+              style={{ opacity: params.spin === 'ccw' ? 1 : 0.5 }}
+              onClick={() => update({ spin: 'ccw' })}
             >
-              clockwise
+              left
             </button>
             <button
               type="button"
               className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.spin === 'ccw' ? 1 : 0.5 }}
-              onClick={() => update({ spin: 'ccw' })}
+              style={{ opacity: params.spin === 'cw' ? 1 : 0.5 }}
+              onClick={() => update({ spin: 'cw' })}
             >
-              counterclockwise
+              right
             </button>
           </div>
         </Field>

@@ -7,11 +7,11 @@ import ParcelGrid from '@/components/ParcelGrid';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
-import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS } from '@/lib/mandala';
+import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, HORUS_RELIEFS } from '@/lib/mandala';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'renderer',
+  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'relief', 'grain', 'renderer',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -183,6 +183,8 @@ function HomeInner() {
     if (params.spokeCount !== DEFAULTS.spokeCount) next.set('spokes', String(params.spokeCount));
     if (params.twist !== DEFAULTS.twist) next.set('twist', String(params.twist));
     if (params.spin !== DEFAULTS.spin) next.set('spin', params.spin);
+    if (params.relief !== DEFAULTS.relief) next.set('relief', params.relief);
+    if (params.grain !== DEFAULTS.grain) next.set('grain', String(params.grain));
     if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
     const qs = next.toString();
     const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
@@ -277,7 +279,7 @@ function HomeInner() {
         )}
       </main>
 
-      <Footer note={params.algorithm === 'rings' && params.ringStyle === 'wheel' ? <WheelCredit /> : null} />
+      <Footer note={params.algorithm !== 'rings' ? null : params.ringStyle === 'wheel' ? <WheelCredit /> : params.ringStyle === 'horus' ? <HorusCredit /> : null} />
     </div>
   );
 }
@@ -293,6 +295,24 @@ function WheelCredit() {
         {WHEEL_PIONEER.slice(0, 6)}…{WHEEL_PIONEER.slice(-4)} ↗
       </a>
       , the first wallet to commit this kind of heightmap to the EVM.
+    </>
+  );
+}
+
+// The horus ring style copies this dreamt heightmap; credit its dreamer
+// (James, 2026-10-29).
+const HORUS_DREAMER = '0x1a86c1b2727cb9f5f077b47314312bb036f1a0cb';
+const HORUS_HEIGHTMAP = 'https://terraformexplorer.xyz/heightmaps/a0488f38e2a753d5f80990c1a631e6414ef907b477a36df35b180d3f3f55d940';
+function HorusCredit() {
+  return (
+    <>
+      The horus ring style copies the{' '}
+      <a href={HORUS_HEIGHTMAP} target="_blank" rel="noopener noreferrer">Eye of Horus heightmap ↗</a>{' '}
+      dreamt by{' '}
+      <a href={`https://terraformexplorer.xyz/dreamers/${HORUS_DREAMER}`} target="_blank" rel="noopener noreferrer">
+        {HORUS_DREAMER.slice(0, 6)}…{HORUS_DREAMER.slice(-4)} ↗
+      </a>
+      .
     </>
   );
 }
@@ -327,5 +347,7 @@ function paramsFromUrl(searchParams) {
     spokeCount: num('spokes', 1, 5, DEFAULTS.spokeCount),
     twist: num('twist', 0, 5, DEFAULTS.twist),
     spin: WHEEL_SPINS.includes(searchParams.get('spin')) ? searchParams.get('spin') : DEFAULTS.spin,
+    relief: HORUS_RELIEFS.includes(searchParams.get('relief')) ? searchParams.get('relief') : DEFAULTS.relief,
+    grain: num('grain', 0, 3, DEFAULTS.grain),
   };
 }
