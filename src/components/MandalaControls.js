@@ -1,7 +1,6 @@
 'use client';
 
 import { randomSeed } from '@/lib/seedrandom';
-import { haloRoom } from '@/lib/mandala';
 
 export default function MandalaControls({ params, onChange }) {
   const update = (patch) => onChange({ ...params, ...patch });
@@ -138,26 +137,6 @@ export default function MandalaControls({ params, onChange }) {
           </>
         )}
 
-        {/* One ring per step from the line height toward the ground: as many as fit. */}
-        {isHorus && (
-          <Slider
-            label="halo"
-            value={Math.min(params.halo, haloRoom(params.horusLine, params.horusGround))}
-            min={0}
-            max={haloRoom(params.horusLine, params.horusGround)}
-            onChange={(halo) => update({ halo })}
-          />
-        )}
-
-        {isHorus && (
-          <Slider
-            label="grain"
-            value={params.grain}
-            min={0}
-            max={3}
-            onChange={(grain) => update({ grain })}
-          />
-        )}
 
         {isTemple && (
           <Slider
@@ -229,6 +208,29 @@ export default function MandalaControls({ params, onChange }) {
               title="the Eye of Horus, copied from a dreamt heightmap"
             >
               horus
+            </button>
+          </div>
+        </Field>
+      )}
+
+      {isHorus && (
+        <Field label="grain">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.grain === 0 ? 1 : 0.5 }}
+              onClick={() => update({ grain: 0 })}
+            >
+              off
+            </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.grain === 1 ? 1 : 0.5 }}
+              onClick={() => update({ grain: 1 })}
+            >
+              on
             </button>
           </div>
         </Field>

@@ -7,11 +7,11 @@ import ParcelGrid from '@/components/ParcelGrid';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
-import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, HORUS_EYES, HALO_MAX } from '@/lib/mandala';
+import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, HORUS_EYES } from '@/lib/mandala';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'line', 'edge', 'ground', 'eye', 'halo', 'grain', 'renderer',
+  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'line', 'edge', 'ground', 'eye', 'grain', 'renderer',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -187,7 +187,6 @@ function HomeInner() {
     if (params.horusEdge !== DEFAULTS.horusEdge) next.set('edge', String(params.horusEdge));
     if (params.horusGround !== DEFAULTS.horusGround) next.set('ground', String(params.horusGround));
     if (params.eye !== DEFAULTS.eye) next.set('eye', params.eye);
-    if (params.halo !== DEFAULTS.halo) next.set('halo', String(params.halo));
     if (params.grain !== DEFAULTS.grain) next.set('grain', String(params.grain));
     if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
     const qs = next.toString();
@@ -355,7 +354,6 @@ function paramsFromUrl(searchParams) {
     horusEdge: num('edge', 0, 9, DEFAULTS.horusEdge),
     horusGround: num('ground', 0, 9, DEFAULTS.horusGround),
     eye: HORUS_EYES.includes(searchParams.get('eye')) ? searchParams.get('eye') : DEFAULTS.eye,
-    halo: num('halo', 0, HALO_MAX, DEFAULTS.halo),
-    grain: num('grain', 0, 3, DEFAULTS.grain),
+    grain: num('grain', 0, 1, DEFAULTS.grain),
   };
 }

@@ -45,8 +45,7 @@ export const DEFAULTS = {
   horusEdge: 6,
   horusGround: 0,
   eye: 'horus',      // 'ra' is the mirror image
-  halo: 0,
-  grain: 0,
+  grain: 0,          // 0 off, 1 on
   spokeCount: 3,
   twist: 2,
   spin: 'ccw',   // #7463 turns counterclockwise
@@ -55,12 +54,6 @@ export const DEFAULTS = {
 export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
 export const RING_STYLES = ['concentric', 'wheel', 'horus'];
 export const HORUS_EYES = ['horus', 'ra'];
-export const HALO_MAX = 8;   // rings; a halo can have at most |line - ground| - 1 of them
-
-// How many halo rings fit between the eye's line height and its ground.
-export function haloRoom(line, ground) {
-  return Math.max(0, Math.abs(line - ground) - 1);
-}
 
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
@@ -84,14 +77,13 @@ export function generateMandala(opts = {}) {
   const horusEdge = clampInt(opts.horusEdge ?? DEFAULTS.horusEdge, 0, 9);
   const horusGround = clampInt(opts.horusGround ?? DEFAULTS.horusGround, 0, 9);
   const eye = HORUS_EYES.includes(opts.eye) ? opts.eye : DEFAULTS.eye;
-  const halo = clampInt(opts.halo ?? DEFAULTS.halo, 0, HALO_MAX);
-  const grain = clampInt(opts.grain ?? DEFAULTS.grain, 0, 3);
+  const grain = clampInt(opts.grain ?? DEFAULTS.grain, 0, 1);
 
   const rng = makeRng(seed);
 
   let grid;
   if (isHorus) {
-    grid = generateHorus(rng, horusLine, horusEdge, horusGround, grain, eye, halo);
+    grid = generateHorus(rng, horusLine, horusEdge, horusGround, grain, eye);
   } else if (isWheel) {
     grid = generateWheel(rng, spokeCount, twist, spin, minHeight, peakHeight);
   } else if (algorithm === 'rings') {
@@ -967,12 +959,9 @@ export function isFourFold(hm) {
 // (line, edge, ground: 9/6/0 is the dream exactly); the lines never move. Dreams of
 // the same eye use other heights — lines 3 with edges 4 over grounds of 0, 1 or 6 —
 // so edges may sit above the lines and the ground above both (the eye cut in).
-// Eye 'ra' is the mirror image (the Eye of Ra faces the other way). Halo steps
-// the ground down from the lines one height per cell — line 9 gives rings of 8, 7,
-// 6… — for as many rings as the slider asks and the gap to the ground allows
-// (haloRoom); it climbs instead when the ground is above the lines. Grain (0-3,
-// seeded) speckles the ground beyond the halo, never onto the line or edge height,
-// so the eye stays clean. No symmetry: it is a copy.
+// Eye 'ra' is the mirror image (the Eye of Ra faces the other way). Grain (off/on,
+// seeded) speckles the ground one height either side of it, never onto the line or
+// edge height, so the eye stays clean. No symmetry: it is a copy.
 // ───────────────────────────────────────────────────────────────────────────
 
 const HORUS_DREAM = [
@@ -1010,38 +999,19 @@ const HORUS_DREAM = [
   '00000000000000000000009999999900',
 ].join('');
 
-function generateHorus(rng, line, edge, ground, grain, eye = 'horus', halo = 0) {
+function generateHorus(rng, line, edge, ground, grain, eye = 'horus') {
   const code = (i, j) => HORUS_DREAM[i * SIDE + (eye === 'ra' ? SIDE - 1 - j : j)];
   // Heights the ground may speckle to: within `grain` of it, never the line or edge height.
   const speckle = [];
   for (let v = Math.max(0, ground - grain); v <= Math.min(9, ground + grain); v++) {
     if (v !== line && v !== edge) speckle.push(v);
   }
-  // Halo: ring d (the cells d steps from the nearest line or edge cell, counting
-  // diagonals as one) sits d below the line height, or d above it when the ground
-  // is higher — never past the ground.
-  const rings = Math.min(halo, haloRoom(line, ground));
-  const away = Math.sign(ground - line);
-  const ringOf = (i, j) => {
-    for (let d = 1; d <= rings; d++) {
-      for (let a = Math.max(0, i - d); a <= Math.min(SIDE - 1, i + d); a++) {
-        for (let b = Math.max(0, j - d); b <= Math.min(SIDE - 1, j + d); b++) {
-          if (code(a, b) !== '0') return d;
-        }
-      }
-    }
-    return 0;
-  };
   const grid = Array.from({ length: SIDE }, () => new Array(SIDE));
   for (let i = 0; i < SIDE; i++) {
     for (let j = 0; j < SIDE; j++) {
       const c = code(i, j);
       let v = c === '9' ? line : c === '6' ? edge : ground;
-      if (c === '0') {
-        const d = rings > 0 ? ringOf(i, j) : 0;
-        if (d > 0) v = line + away * d;
-        else if (grain > 0 && speckle.length) v = speckle[Math.floor(rng() * speckle.length)];
-      }
+      if (c === '0' && grain > 0 && speckle.length) v = speckle[Math.floor(rng() * speckle.length)];
       grid[i][j] = String(v);
     }
   }

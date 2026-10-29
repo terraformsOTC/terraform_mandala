@@ -261,7 +261,6 @@ export function defaultParams() {
     horusEdge: DEFAULTS.horusEdge,
     horusGround: DEFAULTS.horusGround,
     eye: DEFAULTS.eye,
-    halo: DEFAULTS.halo,
     grain: DEFAULTS.grain,
     spokeCount: DEFAULTS.spokeCount,
     twist: DEFAULTS.twist,
