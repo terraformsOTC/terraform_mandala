@@ -1,6 +1,7 @@
 'use client';
 
 import { randomSeed } from '@/lib/seedrandom';
+import { NAZCA_FIGURES } from '@/lib/mandala';
 
 export default function MandalaControls({ params, onChange }) {
   const update = (patch) => onChange({ ...params, ...patch });
@@ -8,7 +9,9 @@ export default function MandalaControls({ params, onChange }) {
   const isRings = params.algorithm === 'rings';
   const isTemple = params.algorithm === 'temple';
   const isWheel = isRings && params.ringStyle === 'wheel';
-  const isHorus = isRings && params.ringStyle === 'horus';
+  const isGlyphs = params.algorithm === 'glyphs';
+  const isHorus = isGlyphs && params.glyphSet === 'horus';
+  const isNazca = isGlyphs && params.glyphSet === 'nazca';
 
   return (
     <div className="flex flex-col gap-4">
@@ -32,37 +35,25 @@ export default function MandalaControls({ params, onChange }) {
       </Field>
 
       <Field label="pattern">
+        {/* Less side padding than other buttons: four words must fit the column. */}
         <div className="flex gap-2">
-          <button
-            type="button"
-            className="btn-primary btn-sm text-sm flex-1"
-            style={{ opacity: isClassic ? 1 : 0.5 }}
-            onClick={() => update({ algorithm: 'classic' })}
-          >
-            classic
-          </button>
-          <button
-            type="button"
-            className="btn-primary btn-sm text-sm flex-1"
-            style={{ opacity: isRings ? 1 : 0.5 }}
-            onClick={() => update({ algorithm: 'rings' })}
-          >
-            rings
-          </button>
-          <button
-            type="button"
-            className="btn-primary btn-sm text-sm flex-1"
-            style={{ opacity: isTemple ? 1 : 0.5 }}
-            onClick={() => update({ algorithm: 'temple' })}
-          >
-            temple
-          </button>
+          {['classic', 'temple', 'rings', 'glyphs'].map((algorithm) => (
+            <button
+              key={algorithm}
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: params.algorithm === algorithm ? 1 : 0.5, paddingInline: 6 }}
+              onClick={() => update({ algorithm })}
+            >
+              {algorithm}
+            </button>
+          ))}
         </div>
       </Field>
 
       <div className="flex flex-col gap-2">
-        {/* The eye sets its own three heights below; peak and min do not apply to it. */}
-        {!isHorus && (
+        {/* A glyph sets its own three heights below; peak and min do not apply to it. */}
+        {!isGlyphs && (
           <>
             <Slider
               label="peak height"
@@ -81,11 +72,11 @@ export default function MandalaControls({ params, onChange }) {
           </>
         )}
 
-        {isHorus && (
+        {isGlyphs && (
           <>
-            <Slider label="line height" value={params.horusLine} min={0} max={9} onChange={(horusLine) => update({ horusLine })} />
-            <Slider label="edge height" value={params.horusEdge} min={0} max={9} onChange={(horusEdge) => update({ horusEdge })} />
-            <Slider label="ground height" value={params.horusGround} min={0} max={9} onChange={(horusGround) => update({ horusGround })} />
+            <Slider label="line height" value={params.glyphLine} min={0} max={9} onChange={(glyphLine) => update({ glyphLine })} />
+            <Slider label="edge height" value={params.glyphEdge} min={0} max={9} onChange={(glyphEdge) => update({ glyphEdge })} />
+            <Slider label="ground height" value={params.glyphGround} min={0} max={9} onChange={(glyphGround) => update({ glyphGround })} />
           </>
         )}
 
@@ -108,7 +99,7 @@ export default function MandalaControls({ params, onChange }) {
           </>
         )}
 
-        {isRings && !isWheel && !isHorus && (
+        {isRings && !isWheel && (
           <Slider
             label="ring count"
             value={params.ringCount}
@@ -186,7 +177,7 @@ export default function MandalaControls({ params, onChange }) {
             <button
               type="button"
               className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: !isWheel && !isHorus ? 1 : 0.5 }}
+              style={{ opacity: !isWheel ? 1 : 0.5 }}
               onClick={() => update({ ringStyle: 'concentric' })}
             >
               concentric
@@ -200,20 +191,54 @@ export default function MandalaControls({ params, onChange }) {
             >
               wheel
             </button>
+          </div>
+        </Field>
+      )}
+
+      {isGlyphs && (
+        <Field label="glyph set">
+          <div className="flex gap-2">
             <button
               type="button"
               className="btn-primary btn-sm text-sm flex-1"
               style={{ opacity: isHorus ? 1 : 0.5 }}
-              onClick={() => update({ ringStyle: 'horus' })}
+              onClick={() => update({ glyphSet: 'horus' })}
               title="the Eye of Horus, copied from a dreamt heightmap"
             >
               horus
+            </button>
+            <button
+              type="button"
+              className="btn-primary btn-sm text-sm flex-1"
+              style={{ opacity: isNazca ? 1 : 0.5 }}
+              onClick={() => update({ glyphSet: 'nazca' })}
+              title="four figures from the Nazca lines of Peru"
+            >
+              nazca
             </button>
           </div>
         </Field>
       )}
 
-      {isHorus && (
+      {isNazca && (
+        <Field label="figure">
+          <div className="grid grid-cols-2 gap-2">
+            {NAZCA_FIGURES.map((f) => (
+              <button
+                key={f}
+                type="button"
+                className="btn-primary btn-sm text-sm"
+                style={{ opacity: params.figure === f ? 1 : 0.5 }}
+                onClick={() => update({ figure: f })}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
+
+      {isGlyphs && (
         <Field label="grain">
           <div className="flex gap-2">
             <button

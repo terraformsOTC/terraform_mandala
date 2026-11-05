@@ -7,11 +7,11 @@ import ParcelGrid from '@/components/ParcelGrid';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
-import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, HORUS_EYES } from '@/lib/mandala';
+import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, GLYPH_SETS, HORUS_EYES, NAZCA_FIGURES } from '@/lib/mandala';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'line', 'edge', 'ground', 'eye', 'grain', 'renderer',
+  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'glyph', 'line', 'edge', 'ground', 'eye', 'figure', 'grain', 'renderer',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -183,10 +183,12 @@ function HomeInner() {
     if (params.spokeCount !== DEFAULTS.spokeCount) next.set('spokes', String(params.spokeCount));
     if (params.twist !== DEFAULTS.twist) next.set('twist', String(params.twist));
     if (params.spin !== DEFAULTS.spin) next.set('spin', params.spin);
-    if (params.horusLine !== DEFAULTS.horusLine) next.set('line', String(params.horusLine));
-    if (params.horusEdge !== DEFAULTS.horusEdge) next.set('edge', String(params.horusEdge));
-    if (params.horusGround !== DEFAULTS.horusGround) next.set('ground', String(params.horusGround));
+    if (params.glyphSet !== DEFAULTS.glyphSet) next.set('glyph', params.glyphSet);
+    if (params.glyphLine !== DEFAULTS.glyphLine) next.set('line', String(params.glyphLine));
+    if (params.glyphEdge !== DEFAULTS.glyphEdge) next.set('edge', String(params.glyphEdge));
+    if (params.glyphGround !== DEFAULTS.glyphGround) next.set('ground', String(params.glyphGround));
     if (params.eye !== DEFAULTS.eye) next.set('eye', params.eye);
+    if (params.figure !== DEFAULTS.figure) next.set('figure', params.figure);
     if (params.grain !== DEFAULTS.grain) next.set('grain', String(params.grain));
     if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
     const qs = next.toString();
@@ -282,9 +284,16 @@ function HomeInner() {
         )}
       </main>
 
-      <Footer note={params.algorithm !== 'rings' ? null : params.ringStyle === 'wheel' ? <WheelCredit /> : params.ringStyle === 'horus' ? <HorusCredit /> : null} />
+      <Footer note={footerCredit(params)} />
     </div>
   );
+}
+
+// The Nazca glyphs are our own drawings, so they credit no one (James, 2026-11-05).
+function footerCredit(params) {
+  if (params.algorithm === 'rings' && params.ringStyle === 'wheel') return <WheelCredit />;
+  if (params.algorithm === 'glyphs' && params.glyphSet === 'horus') return <HorusCredit />;
+  return null;
 }
 
 // The wheel ring style is after parcel #7463's dream; credit the wallet that first
@@ -302,14 +311,14 @@ function WheelCredit() {
   );
 }
 
-// The horus ring style copies this dreamt heightmap; credit its dreamer
+// The horus glyph copies this dreamt heightmap; credit its dreamer
 // (James, 2026-10-29).
 const HORUS_DREAMER = '0x1a86c1b2727cb9f5f077b47314312bb036f1a0cb';
 const HORUS_HEIGHTMAP = 'https://terraformexplorer.xyz/heightmaps/a0488f38e2a753d5f80990c1a631e6414ef907b477a36df35b180d3f3f55d940';
 function HorusCredit() {
   return (
     <>
-      The horus ring style copies the{' '}
+      The horus glyph copies the{' '}
       <a href={HORUS_HEIGHTMAP} target="_blank" rel="noopener noreferrer">Eye of Horus heightmap ↗</a>{' '}
       dreamt by{' '}
       <a href={`https://terraformexplorer.xyz/dreamers/${HORUS_DREAMER}`} target="_blank" rel="noopener noreferrer">
@@ -334,11 +343,14 @@ function paramsFromUrl(searchParams) {
     return Number.isInteger(v) && v >= lo && v <= hi ? v : fallback;
   };
   const algo = searchParams.get('algo');
+  const ring = searchParams.get('ring');
   const styleParam = searchParams.get('style');
+  // Horus was a ring style until 2026-11-05; links from then must still open it.
+  const oldHorusLink = algo === 'rings' && ring === 'horus';
   return {
     seed,
-    algorithm: ['rings', 'temple'].includes(algo) ? algo : 'classic',
-    ringStyle: RING_STYLES.includes(searchParams.get('ring')) ? searchParams.get('ring') : DEFAULTS.ringStyle,
+    algorithm: oldHorusLink ? 'glyphs' : ['rings', 'temple', 'glyphs'].includes(algo) ? algo : 'classic',
+    ringStyle: RING_STYLES.includes(ring) ? ring : DEFAULTS.ringStyle,
     variance: num('variance', 1, 4, DEFAULTS.variance),
     peakHeight: num('peak', 1, 9, DEFAULTS.peakHeight),
     startValue: num('start', 0, 9, DEFAULTS.startValue),
@@ -350,10 +362,12 @@ function paramsFromUrl(searchParams) {
     spokeCount: num('spokes', 1, 5, DEFAULTS.spokeCount),
     twist: num('twist', 0, 5, DEFAULTS.twist),
     spin: WHEEL_SPINS.includes(searchParams.get('spin')) ? searchParams.get('spin') : DEFAULTS.spin,
-    horusLine: num('line', 0, 9, DEFAULTS.horusLine),
-    horusEdge: num('edge', 0, 9, DEFAULTS.horusEdge),
-    horusGround: num('ground', 0, 9, DEFAULTS.horusGround),
+    glyphSet: GLYPH_SETS.includes(searchParams.get('glyph')) ? searchParams.get('glyph') : DEFAULTS.glyphSet,
+    glyphLine: num('line', 0, 9, DEFAULTS.glyphLine),
+    glyphEdge: num('edge', 0, 9, DEFAULTS.glyphEdge),
+    glyphGround: num('ground', 0, 9, DEFAULTS.glyphGround),
     eye: HORUS_EYES.includes(searchParams.get('eye')) ? searchParams.get('eye') : DEFAULTS.eye,
+    figure: NAZCA_FIGURES.includes(searchParams.get('figure')) ? searchParams.get('figure') : DEFAULTS.figure,
     grain: num('grain', 0, 1, DEFAULTS.grain),
   };
 }

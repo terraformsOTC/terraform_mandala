@@ -1,10 +1,10 @@
 import { makeRng } from './seedrandom.js';
 import { validate } from './heightmap.js';
 
-// 32x32 heightmap generator. Every pattern but two ring styles is D2-symmetric
-// (horizontal + vertical mirror axes, 180° rotation); the wheel is 4-fold
-// rotational (90° and 180°) with no mirror axis; horus is a copy of a dreamt
-// image and has no symmetry at all. The check runs before return.
+// 32x32 heightmap generator. Every pattern but the wheel and the glyphs is
+// D2-symmetric (horizontal + vertical mirror axes, 180° rotation); the wheel is
+// 4-fold rotational (90° and 180°) with no mirror axis; a glyph is a fixed drawing
+// and has no symmetry at all. The check runs before return.
 //
 // The generators dispatched from generateMandala(opts):
 //   classic   — port of d3l33t's mandala-gen2.js (a seeded random walk on one
@@ -20,9 +20,11 @@ import { validate } from './heightmap.js';
 //   rings/wheel — after parcel #7463: hub, cone, a turning cross and seeded
 //               spokes set off the radius. 4-fold ROTATIONAL symmetry only, no
 //               mirror axis (see generateWheel).
-//   rings/horus — the Eye of Horus heightmap dreamt by 0x1a86…a0cb, copied
+//   glyphs/horus — the Eye of Horus heightmap dreamt by 0x1a86…a0cb, copied
 //               line for line; its three heights (lines, edges, ground) are
-//               set freely, its lines never move (see generateHorus).
+//               set freely, its lines never move (see generateGlyph).
+//   glyphs/nazca — our own drawings of four Nazca geoglyphs, in the same three
+//               heights (see NAZCA_DREAMS).
 //
 // terraceCount drives complexity for the three temple variants. seed is the
 // RNG input via mulberry32+FNV-1a; identical seed → identical output.
@@ -41,10 +43,12 @@ export const DEFAULTS = {
   terraceCount: 5,
   templeStyle: 'wat',
   ringStyle: 'concentric',
-  horusLine: 9,     // the dream's own heights: lines 9, their edges 6, ground 0
-  horusEdge: 6,
-  horusGround: 0,
+  glyphSet: 'horus',
+  glyphLine: 9,     // the dream's own heights: lines 9, their edges 6, ground 0
+  glyphEdge: 6,
+  glyphGround: 0,
   eye: 'horus',      // 'ra' is the mirror image
+  figure: 'hummingbird',
   grain: 0,          // 0 off, 1 on
   spokeCount: 3,
   twist: 2,
@@ -52,16 +56,18 @@ export const DEFAULTS = {
 };
 
 export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
-export const RING_STYLES = ['concentric', 'wheel', 'horus'];
+export const RING_STYLES = ['concentric', 'wheel'];
+export const GLYPH_SETS = ['horus', 'nazca'];
 export const HORUS_EYES = ['horus', 'ra'];
+export const NAZCA_FIGURES = ['hummingbird', 'monkey', 'spider', 'condor'];
 
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
   const rawAlgo = opts.algorithm;
-  const algorithm = ['rings', 'temple'].includes(rawAlgo) ? rawAlgo : 'classic';
+  const algorithm = ['rings', 'temple', 'glyphs'].includes(rawAlgo) ? rawAlgo : 'classic';
   const ringStyle = RING_STYLES.includes(opts.ringStyle) ? opts.ringStyle : DEFAULTS.ringStyle;
   const isWheel = algorithm === 'rings' && ringStyle === 'wheel';
-  const isHorus = algorithm === 'rings' && ringStyle === 'horus';
+  const isGlyph = algorithm === 'glyphs';
   const peakHeight = clampInt(opts.peakHeight ?? DEFAULTS.peakHeight, 1, 9);
   const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
   const variance = clampInt(opts.variance ?? DEFAULTS.variance, 1, 4);
@@ -73,17 +79,21 @@ export function generateMandala(opts = {}) {
   const spokeCount = clampInt(opts.spokeCount ?? DEFAULTS.spokeCount, 1, 5);
   const twist = clampInt(opts.twist ?? DEFAULTS.twist, 0, 5);
   const spin = WHEEL_SPINS.includes(opts.spin) ? opts.spin : DEFAULTS.spin;
-  const horusLine = clampInt(opts.horusLine ?? DEFAULTS.horusLine, 0, 9);
-  const horusEdge = clampInt(opts.horusEdge ?? DEFAULTS.horusEdge, 0, 9);
-  const horusGround = clampInt(opts.horusGround ?? DEFAULTS.horusGround, 0, 9);
+  const glyphSet = GLYPH_SETS.includes(opts.glyphSet) ? opts.glyphSet : DEFAULTS.glyphSet;
+  const glyphLine = clampInt(opts.glyphLine ?? DEFAULTS.glyphLine, 0, 9);
+  const glyphEdge = clampInt(opts.glyphEdge ?? DEFAULTS.glyphEdge, 0, 9);
+  const glyphGround = clampInt(opts.glyphGround ?? DEFAULTS.glyphGround, 0, 9);
   const eye = HORUS_EYES.includes(opts.eye) ? opts.eye : DEFAULTS.eye;
+  const figure = NAZCA_FIGURES.includes(opts.figure) ? opts.figure : DEFAULTS.figure;
   const grain = clampInt(opts.grain ?? DEFAULTS.grain, 0, 1);
 
   const rng = makeRng(seed);
 
   let grid;
-  if (isHorus) {
-    grid = generateHorus(rng, horusLine, horusEdge, horusGround, grain, eye);
+  if (isGlyph) {
+    const dream = glyphSet === 'nazca' ? NAZCA_DREAMS[figure] : HORUS_DREAM;
+    const mirrored = glyphSet === 'horus' && eye === 'ra';
+    grid = generateGlyph(rng, dream, mirrored, glyphLine, glyphEdge, glyphGround, grain);
   } else if (isWheel) {
     grid = generateWheel(rng, spokeCount, twist, spin, minHeight, peakHeight);
   } else if (algorithm === 'rings') {
@@ -111,8 +121,8 @@ export function generateMandala(opts = {}) {
   const heightmap = grid.map((row) => row.join('')).join('');
 
   const v = validate(heightmap);
-  const symmetric = isHorus
-    ? true   // a copy of a dreamt image: no symmetry to check
+  const symmetric = isGlyph
+    ? true   // a fixed drawing: no symmetry to check
     : isWheel
     ? isFourFold(heightmap)
     : v.vertical_sym && v.horizontal_sym && v.rotational_sym;
@@ -952,7 +962,7 @@ export function isFourFold(hm) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Horus, a ring style: the Eye of Horus heightmap dreamt by
+// Horus, a glyph: the Eye of Horus heightmap dreamt by
 // 0x1a86c1b2727cb9f5f077b47314312bb036f1a0cb (terraformexplorer.xyz/heightmaps/
 // a0488f38…d940), copied cell for cell (James, 2026-10-29). It is drawn in three
 // heights — 9 the lines, 6 their soft edges, 0 the ground — and each is set freely
@@ -999,8 +1009,152 @@ const HORUS_DREAM = [
   '00000000000000000000009999999900',
 ].join('');
 
-function generateHorus(rng, line, edge, ground, grain, eye = 'horus') {
-  const code = (i, j) => HORUS_DREAM[i * SIDE + (eye === 'ra' ? SIDE - 1 - j : j)];
+// Nazca, the second glyph set: our own drawings of four Nazca geoglyphs, placed cell
+// by cell over aerial photographs (James, 2026-11-05), in the same three codes as
+// HORUS_DREAM. One row renders 1.5 columns tall, so a circle is 1.5 times as many
+// columns as rows. Each figure is turned to fill the tall parcel; a line needs a gap
+// of at least one cell to read as a line. Originals, so the footer credits no one.
+const NAZCA_DREAMS = {
+  hummingbird: [
+    '00000000000000060000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000696000000000000000',
+    '00000000000000909000000000000000',
+    '06999900000009000900000009999600',
+    '00000099990009000900099990000000',
+    '00000000009999000999900000000000',
+    '00000699990009000900099996000000',
+    '00000000009999000999900000000000',
+    '00000006990009000900099600000000',
+    '00000000009999000999900000000000',
+    '00000000000009000900000000000000',
+    '00000909099999999999990909000000',
+    '00006090900909090909009090600000',
+    '00000000000909090909000000000000',
+    '00000000000909090909000000000000',
+    '00000000000609090906000000000000',
+    '00000000000009090900000000000000',
+    '00000000000006090600000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000090000000000000000',
+    '00000000000000060000000000000000',
+  ].join(''),
+  monkey: [
+    '00000000000000000000000000000000',
+    '00000009999999999999900000000000',
+    '00000090000090909090900000000000',
+    '00000909999900606060600000000000',
+    '00000909000000000000000000000000',
+    '00669999000000060606060600000000',
+    '00090000900000090909090900000000',
+    '00900000099000099999999900000000',
+    '00900000090990090090000000000000',
+    '00090000990009900900000000000000',
+    '00009999009900009000000000000000',
+    '00000090900099990000000000000000',
+    '00000090900000000000000606060000',
+    '00000090099900000999999999900000',
+    '00000009000099909000000000090000',
+    '00000000999000090009999999900000',
+    '00000000000999000090000000060600',
+    '00000000000000990009999999999900',
+    '00000000000000009990000000000090',
+    '00000000000000000009999999999900',
+    '00000000000000000000900900000000',
+    '00000009999999990000090090000000',
+    '00000990000000009900090090000000',
+    '00009000999999900090090090000000',
+    '00009009000000090090090090000000',
+    '00090090099990090090090090000000',
+    '00090090090090090090090090000000',
+    '00090090009999900090090090000000',
+    '00090009000000000900090090000000',
+    '00009000999999999000900900000000',
+    '00000900000000000009009000000000',
+    '00000099999999999999990000000000',
+  ].join(''),
+  spider: [
+    '00060060000000000000000000000000',
+    '00090090000000000000000060060000',
+    '00090090000000000000000090090000',
+    '00009009000000000000000090090000',
+    '00000900900000000000000900900000',
+    '00000900900006000600009009000000',
+    '00000900900090000090009009000000',
+    '00009009000090000090000909000000',
+    '00090090000009000900000090900000',
+    '00090009000000999000000900090000',
+    '00090000999999000999999000090000',
+    '00009000000090000090000000900000',
+    '00000999999990000099999999000000',
+    '00000000000090000090000000000000',
+    '00009999999999000999999999900000',
+    '00090000000000999000000000090000',
+    '00900009999999090999999900009000',
+    '00900090000000090000000090009000',
+    '00900900000099999990000009009000',
+    '00900900009900000009900009009000',
+    '00090090090000000000090090090000',
+    '00009009090000000000090900900000',
+    '00009009090000000000090900900000',
+    '00009009090000000000090900900000',
+    '00009009090000000000090900900000',
+    '00090090009900000009900090090000',
+    '00900900000099999990000009009000',
+    '00900900000000060000000009009000',
+    '00900900000000000000000009009000',
+    '00600600000000000000000009009000',
+    '00000000000000000000000009009000',
+    '00000000000000000000000006006000',
+  ].join(''),
+  condor: [
+    '00000000000000060000000000000000',
+    '00000000000000999000000000000000',
+    '00000000000009000900000000000000',
+    '00000000000009000900000000000000',
+    '00000000000000999000000000000000',
+    '00000000000000909000000000000000',
+    '00000000000000909000000000000000',
+    '69990000000000909000000000099960',
+    '00009999900009000900009999900000',
+    '00000000099990000099990000000000',
+    '00000000000090000090000000000000',
+    '69999999999990000099999999999960',
+    '00000000000090000090000000000000',
+    '00000000009990000099900000000000',
+    '00000009990090000090099900000000',
+    '00009990000099000990000099900000',
+    '00990000009909000909900000099000',
+    '06000000090000909000090000000600',
+    '00000000900000909000009000000000',
+    '00000099000000909000000990000000',
+    '00000900000009999900000009000000',
+    '00006000000099090990000000600000',
+    '00000000000909090909000000000000',
+    '00000000009009090900900000000000',
+    '00000699990009090900099996000000',
+    '00000000090009090900090000000000',
+    '00006999990009090900099999600000',
+    '00000000090090090090090000000000',
+    '00000699990090090090099996000000',
+    '00000000000090090090000000000000',
+    '00000000000090090090000000000000',
+    '00000000000060060060000000000000',
+  ].join(''),
+};
+
+function generateGlyph(rng, dream, mirrored, line, edge, ground, grain) {
+  const code = (i, j) => dream[i * SIDE + (mirrored ? SIDE - 1 - j : j)];
   // Heights the ground may speckle to: within `grain` of it, never the line or edge height.
   const speckle = [];
   for (let v = Math.max(0, ground - grain); v <= Math.min(9, ground + grain); v++) {
