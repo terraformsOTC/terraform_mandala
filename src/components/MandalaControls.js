@@ -57,6 +57,7 @@ export default function MandalaControls({ params, onChange }) {
           <>
             <Slider
               label="peak height"
+              isHeight
               value={params.peakHeight}
               min={1}
               max={9}
@@ -74,9 +75,9 @@ export default function MandalaControls({ params, onChange }) {
 
         {isGlyphs && (
           <>
-            <Slider label="line height" value={params.glyphLine} min={0} max={9} onChange={(glyphLine) => update({ glyphLine })} />
-            <Slider label="edge height" value={params.glyphEdge} min={0} max={9} onChange={(glyphEdge) => update({ glyphEdge })} />
-            <Slider label="ground height" value={params.glyphGround} min={0} max={9} onChange={(glyphGround) => update({ glyphGround })} />
+            <Slider label="line height" isHeight value={params.glyphLine} min={0} max={9} onChange={(glyphLine) => update({ glyphLine })} />
+            <Slider label="edge height" isHeight value={params.glyphEdge} min={0} max={9} onChange={(glyphEdge) => update({ glyphEdge })} />
+            <Slider label="ground height" isHeight value={params.glyphGround} min={0} max={9} onChange={(glyphGround) => update({ glyphGround })} />
           </>
         )}
 
@@ -351,9 +352,10 @@ function Field({ label, children, tight = false }) {
   );
 }
 
-function Slider({ label, value, min, max, onChange }) {
+// Height 9 draws nothing on-chain, so the label says so wherever a height can reach it.
+function Slider({ label, value, min, max, onChange, isHeight = false }) {
   return (
-    <Field label={`${label} — ${value}`} tight>
+    <Field label={`${label} — ${value}${isHeight && value === 9 ? ' (empty)' : ''}`} tight>
       <input
         type="range"
         min={min}

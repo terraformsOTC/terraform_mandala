@@ -348,21 +348,24 @@ const XTRA_COUNT_PATTERNS = [
   [7, 7, 7, 7],
 ];
 
-// Reproduce the on-chain `charSet` / `mainSet` construction. We treat MODE as a
-// daydream variant (1 = daydream, 3 = origin daydream) and ANTENNA=1, since the
-// preview path forces both.
+// Reproduce the on-chain `charSet` / `mainSet` construction, for the parcel's real
+// antenna. MODE only needs to mark origin parcels here: the on-chain loop treats
+// daydream and terraformed alike.
 function buildCharSets(c, isOrigin) {
-  const bCore = c.BIOMECODE.slice();
-  // BIOME==0 && MODE>0 && ANTENNA==1 path pushes 5 spaces; doesn't apply for #1627.
-  if (c.BIOME === 0) {
+  let bCore = c.BIOMECODE.slice();
+  if (c.ANTENNA === 0) {
+    bCore = [...new Set(bCore)];
+  } else if (c.BIOME === 0) {
     for (let i = 0; i < 5; i++) bCore.push(' ');
   }
 
   const originalChars = bCore.slice();
   const SEED = c.SEED || 0;
-  // drive used by the ANTENNA==0 h==0 path — kept for completeness even though
-  // ANTENNA is forced to 1 in our preview.
-  const drive = Math.max(0.1, Math.min(0.2, 0.1 + (SEED / 10000) * 0.1));
+  // drive used by the ANTENNA==0 h==0 path.
+  let drive = 0.1 + 0.1 * Math.min(Math.max(SEED, 400), 10000) / 10000;
+  if (SEED > 9950 && isOrigin) drive = 0.888;
+  else if (SEED > 9000 && isOrigin) drive = 0.22;
+  else if (SEED > 9950) drive *= 1.1;
 
   if (isOrigin) {
     // V2_UNI === V0_UNI (same 28-entry table on-chain). Origin parcels build
@@ -401,10 +404,14 @@ function buildCharSets(c, isOrigin) {
     patternBlade = c.bladeRailSequencer[idx].split('').map((s) => (s === '▰' ? '░' : s));
   }
 
-  // For SEED <= 9950 in non-Origin daydream, seedSet = [patternBlade] and
-  // charSet = [originalChars, ...seedSet].flat(). We follow that case.
-  const charSet = [...originalChars, ...patternBlade];
-  const mainSet = originalChars.slice().reverse();
+  // A non-origin parcel adds its blade, or above seed 9950 the seed traits' sets: an
+  // X-Seed (above 9970) all of them, a Y-Seed one, reversed. Those seeds also animate
+  // height 0 from the whole charSet.
+  let extra = patternBlade;
+  if (SEED > 9970) extra = V0_UNI.flatMap((u) => v0MakeSet(u));
+  else if (SEED > 9950) extra = v0MakeSet(V0_UNI[Math.floor(SEED) % 3]).slice().reverse();
+  const charSet = [...originalChars, ...extra];
+  const mainSet = SEED > 9950 ? charSet : originalChars.slice().reverse();
   return { charSet, mainSet, drive, coreCharsetLength: bCore.length };
 }
 
@@ -418,12 +425,11 @@ export async function prepareRenderer(html, opts = {}) {
 
   const scriptText = decodeScriptText(html);
   const constants = parseScriptConstants(scriptText);
-  // Preview path forces a daydream variant + ANTENNA=1 — mirror that. Origin
-  // parcels (opts.isOrigin) use origin daydream (MODE=3) so the extra origin
-  // glyph set is built; everyone else uses plain daydream (MODE=1).
+  // Origin parcels (opts.isOrigin) use an origin mode so the extra origin glyph set is
+  // built; the on-chain loop draws daydream and terraformed the same. ANTENNA stays as
+  // the parcel's HTML has it, as the preview does.
   const isOrigin = !!opts.isOrigin;
   constants.MODE = isOrigin ? 3 : 1;
-  constants.ANTENNA = 1;
 
   const keyframes = parseKeyframes(html);
   const animClasses = parseClassAnimations(html);
@@ -605,7 +611,7 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
   for (let r = 0; r < 32; r++) {
     for (let c = 0; c < 32; c++) {
       const h = heightmap.charCodeAt(r * 32 + c) - 48;
-      if (h < 0 || h > 9) continue;
+      if (h < 0 || h >= 9) continue; // 9 is an empty cell on-chain
       const cls = HEIGHT_TO_CLASS[h] || 'a';
       const color = classColors[cls] || '#fff';
       let ch;
@@ -625,8 +631,11 @@ export function renderFrame(ctx, state, heightmap, timeMs, opts = {}) {
           ch = decodeEntity(state.charSet[idx] ?? ' ');
         }
       } else if (h === 0) {
-        // V2 ANTENNA>0 path: per-cell m1 depends on position + airship.
-        const m1 = Math.hypot(r - c, c - 15.5) + airship * 0.05 * SEED * 0.00045;
+        // V2 ANTENNA>0: per-cell m1 depends on position + airship. ANTENNA==0: one
+        // value for the whole parcel, stepping with time.
+        const m1 = state.constants.ANTENNA === 0
+          ? Math.floor((airship * state.drive) % Math.max(1, charSetLen))
+          : Math.hypot(r - c, c - 15.5) + airship * 0.05 * SEED * 0.00045;
         const idx = Math.abs(Math.floor(m1)) % Math.max(1, mainSetLen);
         ch = decodeEntity(state.mainSet[idx] ?? ' ');
       } else {

@@ -44,7 +44,8 @@ export const DEFAULTS = {
   templeStyle: 'wat',
   ringStyle: 'concentric',
   glyphSet: 'horus',
-  glyphLine: 9,     // the dream's own heights: lines 9, their edges 6, ground 0
+  glyphLine: 8,     // the lowest height that still draws. 9 is empty on-chain, which cuts the
+                    // lines out of the ground; the Horus dream itself is 9 / 6 / 0
   glyphEdge: 6,
   glyphGround: 0,
   eye: 'horus',      // 'ra' is the mirror image
