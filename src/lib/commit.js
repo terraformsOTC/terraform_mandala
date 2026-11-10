@@ -1,5 +1,6 @@
 // Commit a mandala heightmap on-chain with Terraforms.commitDreamToCanvas, and
-// (if needed first) move the parcel to the v2 renderer with setTokenURIAddress.
+// (if needed first) move the parcel to the v2 renderer with setTokenURIAddress,
+// or return an already-terraformed parcel to daydream mode with enterDream.
 //
 // These are the only code paths on the site that write to Ethereum, so every
 // step is checked against the chain itself rather than assumed:
@@ -17,16 +18,18 @@
 //
 // The commit also requires the parcel to render with v2 (renderer index 2);
 // otherwise the mandala would show in the older v0 style. Migration is its own
-// transaction with the same layers — see prepareMigrate below.
+// transaction with the same layers — see prepareMigrate below. So is the
+// return to daydream for a parcel that is already terraformed — prepareDream.
 //
 // Contract facts below are from the verified source on Sourcify
 // (contracts/Terraforms.sol, TerraformsDreaming.sol): selectors 0x502f260c
-// (commitDreamToCanvas) and 0x29fdf854 (setTokenURIAddress) are present in the
-// deployed bytecode (checked 2026-10-04 / 2026-10-05).
+// (commitDreamToCanvas), 0x29fdf854 (setTokenURIAddress) and 0xd359fc19
+// (enterDream) are present in the deployed bytecode (checked 2026-10-04,
+// 2026-10-05 and 2026-11-10).
 
 import { AbiCoder, BrowserProvider, Contract, keccak256 } from 'ethers';
 import { TERRAFORMS_ADDRESS, V0_RENDERER_ADDRESS, V2_RENDERER_ADDRESS } from './addresses';
-import { STATUS_NAMES, isDreamingStatus, CommitError } from './commitShared';
+import { STATUS_NAMES, isDreamingStatus, isTerraformedStatus, CommitError } from './commitShared';
 import { toCanvasUints, validate, TOTAL } from './heightmap';
 
 const MAINNET = 1n;
@@ -34,6 +37,7 @@ const MAINNET = 1n;
 const TERRAFORMS_ABI = [
   'function commitDreamToCanvas(uint256 tokenId, uint256[16] dream)',
   'function setTokenURIAddress(uint256[] tokens, uint256 index)',
+  'function enterDream(uint256 tokenId)',
   'function tokenURIAddresses(uint256 index) view returns (address)',
   'function tokenHTML(uint256 tokenId) view returns (string)',
   'function ownerOf(uint256 tokenId) view returns (address)',
@@ -77,7 +81,7 @@ async function readRendererIndex(provider, id, blockTag = 'latest') {
 
 // STATUS_NAMES, isDreamingStatus and CommitError live in ./commitShared so the
 // panel can use them without loading this module; re-exported for callers here.
-export { STATUS_NAMES, isDreamingStatus, CommitError };
+export { STATUS_NAMES, isDreamingStatus, isTerraformedStatus, CommitError };
 
 function walletProvider() {
   if (typeof window === 'undefined' || !window.ethereum) {
@@ -140,12 +144,18 @@ export async function prepareCommit({ tokenId, heightmap, account, onStep = () =
 
   const status = Number(statusRaw);
   onStep(`parcel #${tokenId} is dreaming`);
-  if (!isDreamingStatus(status)) {
+  if (isTerraformedStatus(status)) {
+    // Only the owner can call enterDream; an authorized dreamer cannot.
+    const isOwner = owner.toLowerCase() === me;
     throw new CommitError(
-      status === 0
-        ? `Parcel #${tokenId} is in Terrain mode. It has to enter daydream mode before a heightmap can be committed.`
-        : `Parcel #${tokenId} is already ${STATUS_NAMES[status]}. It has to enter daydream mode again before a new heightmap can be committed.`,
+      isOwner
+        ? `Parcel #${tokenId} is already ${STATUS_NAMES[status]}. It has to go back to daydream mode before a new heightmap can be committed.`
+        : `Parcel #${tokenId} is already ${STATUS_NAMES[status]}. Only its owner (${owner}) can return it to daydream mode.`,
+      { needsDream: isOwner },
     );
+  }
+  if (!isDreamingStatus(status)) {
+    throw new CommitError(`Parcel #${tokenId} is in Terrain mode. It has to enter daydream mode before a heightmap can be committed.`);
   }
   const newStatus = status + 1;
 
@@ -355,4 +365,95 @@ export async function verifyMigrate(prepared, blockNumber) {
     // The node would not run the HTML call; the index check above stands.
   }
   return { ok: index === V2_INDEX, index, htmlCheck };
+}
+
+// --- Return to daydream ------------------------------------------------------
+//
+// enterDream(uint256 tokenId) requires msg.sender == ownerOf(tokenId) (an
+// authorized dreamer is not enough). From Terraformed (2) it sets Daydream (1),
+// from Origin Terraformed (4) Origin Daydream (3); it also records the block and
+// emits Daydreaming. No ETH, no transfers. The stored canvas stays in storage
+// but the renderers ignore it while the parcel dreams (every cell reads 0, a
+// blank canvas) until the next commit overwrites it. On a TERRAIN parcel (0) the same call is a
+// permanent change of mode, so the site only ever sends it for a parcel that is
+// terraformed, and re-reads the status right before signing to be sure.
+
+const DREAM_SELECTOR = '0xd359fc19';
+const DREAM_CALLDATA_BYTES = 4 + 32;
+
+export async function prepareDream({ tokenId, account, onStep = () => {}, provider: injected }) {
+  const id = BigInt(tokenId);
+  if (id < 1n || id > 9911n) throw new CommitError('Only minted parcels (#1–#9911) can enter daydream mode.');
+  const provider = injected ?? walletProvider();
+  onStep('wallet is on Ethereum mainnet');
+  await requireMainnet(provider);
+  const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, provider);
+
+  onStep(`you own parcel #${tokenId}`);
+  const [owner, statusRaw] = await Promise.all([tf.ownerOf(id), tf.tokenToStatus(id)]);
+  if (owner.toLowerCase() !== account.toLowerCase()) {
+    throw new CommitError(`Only the owner can return a parcel to daydream mode. Parcel #${tokenId} is owned by ${owner}.`);
+  }
+
+  const status = Number(statusRaw);
+  onStep(`parcel #${tokenId} is terraformed`);
+  if (!isTerraformedStatus(status)) {
+    throw new CommitError(
+      isDreamingStatus(status)
+        ? `Parcel #${tokenId} is already ${STATUS_NAMES[status]}; there is nothing to undo.`
+        : `Parcel #${tokenId} is in Terrain mode. The site does not change Terrain parcels.`,
+    );
+  }
+
+  onStep('the transaction simulates successfully');
+  try {
+    await tf.enterDream.staticCall(id, { from: account });
+  } catch (err) {
+    throw new CommitError(`The contract would reject this transaction (${err.shortMessage || err.message}). Nothing was sent.`);
+  }
+  const gas = await tf.enterDream.estimateGas(id, { from: account });
+  return { tokenId: Number(id), status, newStatus: status - 1, gas };
+}
+
+export async function sendDream(prepared, account) {
+  const provider = walletProvider();
+  await requireMainnet(provider);
+  const signer = await provider.getSigner();
+  if ((await signer.getAddress()).toLowerCase() !== account.toLowerCase()) {
+    throw new CommitError('The wallet account changed. Reconnect and try again.');
+  }
+  const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, signer);
+  // A parcel never returns to Terrain, so this cannot change after the checks;
+  // read it anyway, because on Terrain the call is permanent.
+  const status = Number(await tf.tokenToStatus(BigInt(prepared.tokenId)));
+  if (!isTerraformedStatus(status) || status !== prepared.status) {
+    throw new CommitError(`Parcel #${prepared.tokenId} is now ${STATUS_NAMES[status] ?? `status ${status}`}, not ${STATUS_NAMES[prepared.status]}. Nothing was sent.`);
+  }
+  const gasLimit = (prepared.gas * 120n) / 100n;
+  const tx = await tf.enterDream.populateTransaction(BigInt(prepared.tokenId), { gasLimit });
+  assertDreamTransaction(tx, prepared);
+  return signer.sendTransaction(tx);
+}
+
+// Byte-level check, for the same fallback() reason as the commit: right
+// contract, enterDream, exactly one tokenId = the parcel, no ETH.
+export function assertDreamTransaction(tx, prepared) {
+  const fail = (why) => {
+    throw new CommitError(`Safety check failed: ${why}. Nothing was sent.`);
+  };
+  if (!tx.to || tx.to.toLowerCase() !== TERRAFORMS_ADDRESS.toLowerCase()) fail('the transaction is not addressed to the Terraforms contract');
+  if (tx.value != null && BigInt(tx.value) !== 0n) fail('the transaction would send ETH');
+  if (!tx.data?.startsWith(DREAM_SELECTOR)) fail('the transaction does not call enterDream');
+  if ((tx.data.length - 2) / 2 !== DREAM_CALLDATA_BYTES) fail('the transaction data is not the expected size');
+  const [tokenId] = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI).interface.decodeFunctionData('enterDream', tx.data);
+  if (tokenId !== BigInt(prepared.tokenId)) fail('the transaction targets a different parcel');
+}
+
+/** After mining: the parcel's status at the mined block is the daydream one. */
+export async function verifyDream(prepared, blockNumber) {
+  const provider = walletProvider();
+  const blockTag = await blockReady(provider, blockNumber);
+  const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, provider);
+  const status = Number(await tf.tokenToStatus(BigInt(prepared.tokenId), { blockTag }));
+  return { ok: status === prepared.newStatus, status };
 }
