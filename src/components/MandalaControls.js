@@ -1,7 +1,11 @@
 'use client';
 
 import { randomSeed } from '@/lib/seedrandom';
-import { NAZCA_FIGURES } from '@/lib/mandala';
+import {
+  PATTERNS, RING_STYLES, TEMPLE_STYLES, GLYPH_SETS, GLYPH_FIGURES, FIGURE_LABELS,
+  figureFor, normalizeGlyphSet,
+} from '@/lib/mandala';
+import { ESCHER_DESIGNS, ESCHER_CATEGORIES, escherDesignsIn, escherTones } from '@/lib/escher';
 
 export default function MandalaControls({ params, onChange }) {
   const update = (patch) => onChange({ ...params, ...patch });
@@ -10,8 +14,9 @@ export default function MandalaControls({ params, onChange }) {
   const isTemple = params.algorithm === 'temple';
   const isWheel = isRings && params.ringStyle === 'wheel';
   const isGlyphs = params.algorithm === 'glyphs';
-  const isHorus = isGlyphs && params.glyphSet === 'horus';
-  const isNazca = isGlyphs && params.glyphSet === 'nazca';
+  const isEscher = params.algorithm === 'escher';
+  const escher = ESCHER_DESIGNS[params.escherDesign] ? params.escherDesign : Object.keys(ESCHER_DESIGNS)[0];
+  const tones = escherTones(escher, params.escherTones);
 
   return (
     <div className="flex flex-col gap-4">
@@ -34,26 +39,11 @@ export default function MandalaControls({ params, onChange }) {
         </div>
       </Field>
 
-      <Field label="pattern">
-        {/* Less side padding than other buttons: four words must fit the column. */}
-        <div className="flex gap-2">
-          {['classic', 'temple', 'rings', 'glyphs'].map((algorithm) => (
-            <button
-              key={algorithm}
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.algorithm === algorithm ? 1 : 0.5, paddingInline: 6 }}
-              onClick={() => update({ algorithm })}
-            >
-              {algorithm}
-            </button>
-          ))}
-        </div>
-      </Field>
+      <PatternMenu params={params} update={update} escher={escher} />
 
       <div className="flex flex-col gap-2">
-        {/* A glyph sets its own three heights below; peak and min do not apply to it. */}
-        {!isGlyphs && (
+        {/* Glyphs and Escher designs set their own heights below; peak and min do not apply. */}
+        {!isGlyphs && !isEscher && (
           <>
             <Slider
               label="peak height"
@@ -80,6 +70,19 @@ export default function MandalaControls({ params, onChange }) {
             <Slider label="ground height" isHeight value={params.glyphGround} min={0} max={9} onChange={(glyphGround) => update({ glyphGround })} />
           </>
         )}
+
+        {/* Contrast depends on the parcel's palette, so every tone is the user's to set. */}
+        {isEscher && ESCHER_DESIGNS[escher].toneLabels.map((label, i) => (
+          <Slider
+            key={`${escher}-${i}`}
+            label={`${label} height`}
+            isHeight
+            value={tones[i]}
+            min={0}
+            max={9}
+            onChange={(v) => update({ escherTones: tones.map((t, k) => (k === i ? v : t)) })}
+          />
+        ))}
 
         {isClassic && (
           <>
@@ -129,7 +132,6 @@ export default function MandalaControls({ params, onChange }) {
           </>
         )}
 
-
         {isTemple && (
           <Slider
             label="terrace count"
@@ -141,212 +143,142 @@ export default function MandalaControls({ params, onChange }) {
         )}
       </div>
 
-      {isClassic && (
-        <Field label="rotational order">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.rotationalOrder === 2 ? 1 : 0.5 }}
-              onClick={() => update({ rotationalOrder: 2 })}
-            >
-              2-fold
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.rotationalOrder === 4 ? 1 : 0.5 }}
-              onClick={() => update({ rotationalOrder: 4 })}
-            >
-              4-fold
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.rotationalOrder === 8 ? 1 : 0.5 }}
-              onClick={() => update({ rotationalOrder: 8 })}
-            >
-              8-fold
-            </button>
-          </div>
-        </Field>
-      )}
-
-      {isRings && (
-        <Field label="ring style">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: !isWheel ? 1 : 0.5 }}
-              onClick={() => update({ ringStyle: 'concentric' })}
-            >
-              concentric
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: isWheel ? 1 : 0.5 }}
-              onClick={() => update({ ringStyle: 'wheel' })}
-              title="after parcel #7463: a spoked wheel, 4-fold rotational symmetry"
-            >
-              wheel
-            </button>
-          </div>
-        </Field>
-      )}
-
-      {isGlyphs && (
-        <Field label="glyph set">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: isHorus ? 1 : 0.5 }}
-              onClick={() => update({ glyphSet: 'horus' })}
-              title="the Eye of Horus, copied from a dreamt heightmap"
-            >
-              horus
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: isNazca ? 1 : 0.5 }}
-              onClick={() => update({ glyphSet: 'nazca' })}
-              title="four figures from the Nazca lines of Peru"
-            >
-              nazca
-            </button>
-          </div>
-        </Field>
-      )}
-
-      {isNazca && (
-        <Field label="figure">
-          <div className="grid grid-cols-2 gap-2">
-            {NAZCA_FIGURES.map((f) => (
-              <button
-                key={f}
-                type="button"
-                className="btn-primary btn-sm text-sm"
-                style={{ opacity: params.figure === f ? 1 : 0.5 }}
-                onClick={() => update({ figure: f })}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </Field>
-      )}
-
       {isGlyphs && (
         <Field label="grain">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.grain === 0 ? 1 : 0.5 }}
-              onClick={() => update({ grain: 0 })}
-            >
-              off
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.grain === 1 ? 1 : 0.5 }}
-              onClick={() => update({ grain: 1 })}
-            >
-              on
-            </button>
-          </div>
-        </Field>
-      )}
-
-      {isHorus && (
-        <Field label="eye">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.eye === 'horus' ? 1 : 0.5 }}
-              onClick={() => update({ eye: 'horus' })}
-            >
-              horus
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.eye === 'ra' ? 1 : 0.5 }}
-              onClick={() => update({ eye: 'ra' })}
-              title="the mirror image: the Eye of Ra faces the other way"
-            >
-              ra
-            </button>
-          </div>
+          <Toggle
+            options={[[0, 'off'], [1, 'on']]}
+            value={params.grain}
+            onSelect={(grain) => update({ grain })}
+          />
         </Field>
       )}
 
       {isWheel && (
         <Field label="spin">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.spin === 'ccw' ? 1 : 0.5 }}
-              onClick={() => update({ spin: 'ccw' })}
-            >
-              left
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.spin === 'cw' ? 1 : 0.5 }}
-              onClick={() => update({ spin: 'cw' })}
-            >
-              right
-            </button>
-          </div>
-        </Field>
-      )}
-
-      {isTemple && (
-        <Field label="architectural inspiration">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.templeStyle === 'cathedral' ? 1 : 0.5 }}
-              onClick={() => update({ templeStyle: 'cathedral' })}
-            >
-              cathedral
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.templeStyle === 'wat' ? 1 : 0.5 }}
-              onClick={() => update({ templeStyle: 'wat' })}
-            >
-              wat
-            </button>
-            <button
-              type="button"
-              className="btn-primary btn-sm text-sm flex-1"
-              style={{ opacity: params.templeStyle === 'ziggurat' ? 1 : 0.5 }}
-              onClick={() => update({ templeStyle: 'ziggurat' })}
-            >
-              ziggurat
-            </button>
-          </div>
+          <Toggle
+            options={[['ccw', 'left'], ['cw', 'right']]}
+            value={params.spin}
+            onSelect={(spin) => update({ spin })}
+          />
         </Field>
       )}
     </div>
   );
 }
 
-function Field({ label, children, tight = false }) {
+// The pattern menu (James, 2026-11-12): the button rows had filled the column, so the
+// choices are now up to three dropdowns, each narrowing the one before —
+//   classic  › symmetry (2-, 4-, 8-fold)
+//   rings    › concentric / wheel
+//   temple   › cathedral / wat / ziggurat
+//   glyphs   › hieroglyphs › eye of horus / eye of ra / ankh
+//            › nazca       › hummingbird / monkey / spider / condor
+//   escher   › fractals / limits / spirals / tessellations › design
+// Picking a higher level resets the levels under it to their first choice.
+function PatternMenu({ params, update, escher }) {
+  const opts = (values, label = (v) => v) => values.map((v) => ({ value: String(v), label: label(v) }));
+  const levels = [{
+    label: 'pattern',
+    value: params.algorithm,
+    options: opts(PATTERNS),
+    onChange: (algorithm) => update({ algorithm }),
+  }];
+
+  if (params.algorithm === 'classic') {
+    levels.push({
+      label: 'symmetry',
+      value: String(params.rotationalOrder),
+      options: opts([2, 4, 8], (n) => `${n}-fold`),
+      onChange: (v) => update({ rotationalOrder: Number(v) }),
+    });
+  } else if (params.algorithm === 'rings') {
+    levels.push({
+      label: 'ring style',
+      value: params.ringStyle,
+      options: opts(RING_STYLES),
+      onChange: (ringStyle) => update({ ringStyle }),
+    });
+  } else if (params.algorithm === 'temple') {
+    levels.push({
+      label: 'architecture',
+      value: params.templeStyle,
+      options: opts(TEMPLE_STYLES),
+      onChange: (templeStyle) => update({ templeStyle }),
+    });
+  } else if (params.algorithm === 'glyphs') {
+    const set = normalizeGlyphSet(params.glyphSet);
+    levels.push({
+      label: 'glyph set',
+      value: set,
+      options: opts(GLYPH_SETS),
+      onChange: (glyphSet) => update({ glyphSet, figure: figureFor(glyphSet, null) }),
+    });
+    levels.push({
+      label: set === 'nazca' ? 'figure' : 'glyph',
+      value: figureFor(set, params.figure),
+      options: opts(GLYPH_FIGURES[set], (f) => FIGURE_LABELS[f] ?? f),
+      onChange: (figure) => update({ figure }),
+    });
+  } else if (params.algorithm === 'escher') {
+    const category = ESCHER_DESIGNS[escher].category;
+    levels.push({
+      label: 'category',
+      value: category,
+      options: opts(ESCHER_CATEGORIES),
+      onChange: (c) => update({ escherDesign: escherDesignsIn(c)[0], escherTones: null }),
+    });
+    levels.push({
+      label: 'design',
+      value: escher,
+      options: opts(escherDesignsIn(category), (id) => ESCHER_DESIGNS[id].label),
+      onChange: (escherDesign) => update({ escherDesign, escherTones: null }),
+    });
+  }
+
   return (
-    <div className={`flex flex-col ${tight ? 'gap-0' : 'gap-1'}`}>
-      <span className="text-xs opacity-60 uppercase tracking-wider">{label}</span>
+    // Each dropdown is as wide as its longest choice and the row wraps, so no label is
+    // cut short ("path of life", "hieroglyphs") in the narrow controls column.
+    <div className="flex flex-wrap gap-2 items-end">
+      {levels.map((level, i) => (
+        <Field key={level.label} label={`${i > 0 ? '› ' : ''}${level.label}`} style={{ flex: '1 1 auto' }}>
+          <select
+            value={level.value}
+            onChange={(e) => level.onChange(e.target.value)}
+            aria-label={level.label}
+            className="w-full min-w-0"
+          >
+            {level.options.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </Field>
+      ))}
+    </div>
+  );
+}
+
+function Toggle({ options, value, onSelect }) {
+  return (
+    <div className="flex gap-2">
+      {options.map(([v, label]) => (
+        <button
+          key={String(v)}
+          type="button"
+          className="btn-primary btn-sm text-sm flex-1"
+          style={{ opacity: value === v ? 1 : 0.5 }}
+          onClick={() => onSelect(v)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Field({ label, children, tight = false, style }) {
+  return (
+    <div className={`flex flex-col ${tight ? 'gap-0' : 'gap-1'} min-w-0`} style={style}>
+      <span className="text-xs opacity-60 uppercase tracking-wider truncate">{label}</span>
       {children}
     </div>
   );

@@ -7,11 +7,12 @@ import ParcelGrid from '@/components/ParcelGrid';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
-import { DEFAULTS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, GLYPH_SETS, HORUS_EYES, NAZCA_FIGURES } from '@/lib/mandala';
+import { DEFAULTS, PATTERNS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, normalizeGlyphSet, figureFor } from '@/lib/mandala';
+import { ESCHER_DESIGNS, escherTones } from '@/lib/escher';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'glyph', 'line', 'edge', 'ground', 'eye', 'figure', 'grain', 'renderer',
+  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'glyph', 'line', 'edge', 'ground', 'eye', 'figure', 'grain', 'escher', 'tones', 'renderer',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -187,9 +188,12 @@ function HomeInner() {
     if (params.glyphLine !== DEFAULTS.glyphLine) next.set('line', String(params.glyphLine));
     if (params.glyphEdge !== DEFAULTS.glyphEdge) next.set('edge', String(params.glyphEdge));
     if (params.glyphGround !== DEFAULTS.glyphGround) next.set('ground', String(params.glyphGround));
-    if (params.eye !== DEFAULTS.eye) next.set('eye', params.eye);
-    if (params.figure !== DEFAULTS.figure) next.set('figure', params.figure);
+    // A glyph is written only when it isn't its set's first (the set's default).
+    if (params.figure !== figureFor(params.glyphSet, null)) next.set('figure', params.figure);
     if (params.grain !== DEFAULTS.grain) next.set('grain', String(params.grain));
+    if (params.escherDesign !== DEFAULTS.escherDesign) next.set('escher', params.escherDesign);
+    const tones = escherTones(params.escherDesign, params.escherTones);
+    if (tones.join() !== ESCHER_DESIGNS[params.escherDesign].tones.join()) next.set('tones', tones.join(','));
     if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
     const qs = next.toString();
     const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
@@ -293,7 +297,8 @@ function HomeInner() {
 // The Nazca glyphs are our own drawings, so they credit no one (James, 2026-11-05).
 function footerCredit(params) {
   if (params.algorithm === 'rings' && params.ringStyle === 'wheel') return <WheelCredit />;
-  if (params.algorithm === 'glyphs' && params.glyphSet === 'horus') return <HorusCredit />;
+  // The Eye of Horus and its mirror, the Eye of Ra, copy a dreamt heightmap; the Ankh is ours.
+  if (params.algorithm === 'glyphs' && normalizeGlyphSet(params.glyphSet) === 'hieroglyphs' && params.figure !== 'ankh') return <HorusCredit />;
   return null;
 }
 
@@ -319,7 +324,7 @@ const HORUS_HEIGHTMAP = 'https://terraformexplorer.xyz/heightmaps/a0488f38e2a753
 function HorusCredit() {
   return (
     <>
-      The horus glyph copies the{' '}
+      The Eye of Horus (and its mirror image, the Eye of Ra) copies the{' '}
       <a href={HORUS_HEIGHTMAP} target="_blank" rel="noopener noreferrer">Eye of Horus heightmap ↗</a>{' '}
       dreamt by{' '}
       <a href={`https://terraformexplorer.xyz/dreamers/${HORUS_DREAMER}`} target="_blank" rel="noopener noreferrer">
@@ -348,9 +353,16 @@ function paramsFromUrl(searchParams) {
   const styleParam = searchParams.get('style');
   // Horus was a ring style until 2026-11-05; links from then must still open it.
   const oldHorusLink = algo === 'rings' && ring === 'horus';
+  // The hieroglyph set was 'horus' until 2026-11-12, with the eye in `eye`
+  // (horus / ra); the glyph is now `figure` (horus / ra / ankh).
+  const glyphSet = normalizeGlyphSet(searchParams.get('glyph'));
+  const figureParam = searchParams.get('figure') ?? (glyphSet === 'hieroglyphs' ? searchParams.get('eye') : null);
+  const escherParam = searchParams.get('escher');
+  const escherDesign = ESCHER_DESIGNS[escherParam] ? escherParam : DEFAULTS.escherDesign;
+  const tonesParam = (searchParams.get('tones') || '').split(',').filter((t) => t !== '').map(Number);
   return {
     seed,
-    algorithm: oldHorusLink ? 'glyphs' : ['rings', 'temple', 'glyphs'].includes(algo) ? algo : 'classic',
+    algorithm: oldHorusLink ? 'glyphs' : PATTERNS.includes(algo) ? algo : 'classic',
     ringStyle: RING_STYLES.includes(ring) ? ring : DEFAULTS.ringStyle,
     variance: num('variance', 1, 4, DEFAULTS.variance),
     peakHeight: num('peak', 1, 9, DEFAULTS.peakHeight),
@@ -363,12 +375,13 @@ function paramsFromUrl(searchParams) {
     spokeCount: num('spokes', 1, 5, DEFAULTS.spokeCount),
     twist: num('twist', 0, 5, DEFAULTS.twist),
     spin: WHEEL_SPINS.includes(searchParams.get('spin')) ? searchParams.get('spin') : DEFAULTS.spin,
-    glyphSet: GLYPH_SETS.includes(searchParams.get('glyph')) ? searchParams.get('glyph') : DEFAULTS.glyphSet,
+    glyphSet,
     glyphLine: num('line', 0, 9, DEFAULTS.glyphLine),
     glyphEdge: num('edge', 0, 9, DEFAULTS.glyphEdge),
     glyphGround: num('ground', 0, 9, DEFAULTS.glyphGround),
-    eye: HORUS_EYES.includes(searchParams.get('eye')) ? searchParams.get('eye') : DEFAULTS.eye,
-    figure: NAZCA_FIGURES.includes(searchParams.get('figure')) ? searchParams.get('figure') : DEFAULTS.figure,
+    figure: figureFor(glyphSet, figureParam),
+    escherDesign,
+    escherTones: escherTones(escherDesign, tonesParam),
     grain: num('grain', 0, 1, DEFAULTS.grain),
   };
 }

@@ -1,3 +1,4 @@
+import { generateEscher, ESCHER_DEFAULT } from './escher.js';
 import { makeRng } from './seedrandom.js';
 import { validate } from './heightmap.js';
 
@@ -43,13 +44,14 @@ export const DEFAULTS = {
   terraceCount: 5,
   templeStyle: 'wat',
   ringStyle: 'concentric',
-  glyphSet: 'horus',
+  glyphSet: 'hieroglyphs',
   glyphLine: 8,     // the lowest height that still draws. 9 is empty on-chain, which cuts the
                     // lines out of the ground; the Horus dream itself is 9 / 6 / 0
   glyphEdge: 6,
   glyphGround: 0,
-  eye: 'horus',      // 'ra' is the mirror image
-  figure: 'hummingbird',
+  figure: 'horus',   // the glyph within the set; each set has its own (figureFor)
+  escherDesign: ESCHER_DEFAULT,
+  escherTones: null, // null = the design's own default heights (escher.js)
   grain: 0,          // 0 off, 1 on
   spokeCount: 3,
   twist: 2,
@@ -58,17 +60,35 @@ export const DEFAULTS = {
 
 export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
 export const RING_STYLES = ['concentric', 'wheel'];
-export const GLYPH_SETS = ['horus', 'nazca'];
-export const HORUS_EYES = ['horus', 'ra'];
+// Glyph sets and the glyphs in each (James, 2026-11-12: the menu reads
+// glyphs > hieroglyphs > eye of horus / eye of ra / ankh, glyphs > nazca > condor...).
+// 'horus' was the hieroglyph set's name until then; old links still open it.
+export const GLYPH_SETS = ['hieroglyphs', 'nazca'];
+export const HIEROGLYPHS = ['horus', 'ra', 'ankh'];
 export const NAZCA_FIGURES = ['hummingbird', 'monkey', 'spider', 'condor'];
+export const GLYPH_FIGURES = { hieroglyphs: HIEROGLYPHS, nazca: NAZCA_FIGURES };
+export const FIGURE_LABELS = { horus: 'eye of horus', ra: 'eye of ra', ankh: 'ankh' };
+export const PATTERNS = ['classic', 'rings', 'temple', 'glyphs', 'escher'];
+
+export function normalizeGlyphSet(set) {
+  if (set === 'horus') return 'hieroglyphs';
+  return GLYPH_SETS.includes(set) ? set : DEFAULTS.glyphSet;
+}
+
+// A glyph valid for the set, else the set's first (its default).
+export function figureFor(set, figure) {
+  const list = GLYPH_FIGURES[normalizeGlyphSet(set)];
+  return list.includes(figure) ? figure : list[0];
+}
 
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
   const rawAlgo = opts.algorithm;
-  const algorithm = ['rings', 'temple', 'glyphs'].includes(rawAlgo) ? rawAlgo : 'classic';
+  const algorithm = PATTERNS.includes(rawAlgo) ? rawAlgo : 'classic';
   const ringStyle = RING_STYLES.includes(opts.ringStyle) ? opts.ringStyle : DEFAULTS.ringStyle;
   const isWheel = algorithm === 'rings' && ringStyle === 'wheel';
   const isGlyph = algorithm === 'glyphs';
+  const isEscher = algorithm === 'escher';
   const peakHeight = clampInt(opts.peakHeight ?? DEFAULTS.peakHeight, 1, 9);
   const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
   const variance = clampInt(opts.variance ?? DEFAULTS.variance, 1, 4);
@@ -80,21 +100,22 @@ export function generateMandala(opts = {}) {
   const spokeCount = clampInt(opts.spokeCount ?? DEFAULTS.spokeCount, 1, 5);
   const twist = clampInt(opts.twist ?? DEFAULTS.twist, 0, 5);
   const spin = WHEEL_SPINS.includes(opts.spin) ? opts.spin : DEFAULTS.spin;
-  const glyphSet = GLYPH_SETS.includes(opts.glyphSet) ? opts.glyphSet : DEFAULTS.glyphSet;
+  const glyphSet = normalizeGlyphSet(opts.glyphSet);
   const glyphLine = clampInt(opts.glyphLine ?? DEFAULTS.glyphLine, 0, 9);
   const glyphEdge = clampInt(opts.glyphEdge ?? DEFAULTS.glyphEdge, 0, 9);
   const glyphGround = clampInt(opts.glyphGround ?? DEFAULTS.glyphGround, 0, 9);
-  const eye = HORUS_EYES.includes(opts.eye) ? opts.eye : DEFAULTS.eye;
-  const figure = NAZCA_FIGURES.includes(opts.figure) ? opts.figure : DEFAULTS.figure;
+  const figure = figureFor(glyphSet, opts.figure);
   const grain = clampInt(opts.grain ?? DEFAULTS.grain, 0, 1);
 
   const rng = makeRng(seed);
 
   let grid;
   if (isGlyph) {
-    const dream = glyphSet === 'nazca' ? NAZCA_DREAMS[figure] : HORUS_DREAM;
-    const mirrored = glyphSet === 'horus' && eye === 'ra';
+    const dream = glyphSet === 'nazca' ? NAZCA_DREAMS[figure] : figure === 'ankh' ? ANKH_DREAM : HORUS_DREAM;
+    const mirrored = glyphSet === 'hieroglyphs' && figure === 'ra';
     grid = generateGlyph(rng, dream, mirrored, glyphLine, glyphEdge, glyphGround, grain);
+  } else if (isEscher) {
+    grid = generateEscher(opts.escherDesign, opts.escherTones);
   } else if (isWheel) {
     grid = generateWheel(rng, spokeCount, twist, spin, minHeight, peakHeight);
   } else if (algorithm === 'rings') {
@@ -122,8 +143,8 @@ export function generateMandala(opts = {}) {
   const heightmap = grid.map((row) => row.join('')).join('');
 
   const v = validate(heightmap);
-  const symmetric = isGlyph
-    ? true   // a fixed drawing: no symmetry to check
+  const symmetric = isGlyph || isEscher
+    ? true   // a fixed drawing, or an Escher design (spirals, tessellations): no symmetry to check
     : isWheel
     ? isFourFold(heightmap)
     : v.vertical_sym && v.horizontal_sym && v.rotational_sym;
@@ -1153,6 +1174,44 @@ const NAZCA_DREAMS = {
     '00000699990060060060099996000000',
   ].join(''),
 };
+
+// The Ankh (James, 2026-11-12): our own drawing, so no credit — an oval loop, a
+// crossbar and a shaft flaring toward its foot, edged in 6 like the Eye of Horus.
+// Drawn by ~/ops/mandala-nazca/ankh.py (visual units: a row is 1.5 columns tall).
+const ANKH_DREAM = [
+    '00000000000000000000000000000000',
+    '00000000000006666660000000000000',
+    '00000000000666999966600000000000',
+    '00000000006699999999660000000000',
+    '00000000066999999999966000000000',
+    '00000000069999666699996000000000',
+    '00000000069996600669996000000000',
+    '00000000669996000069996600000000',
+    '00000000699996000069999600000000',
+    '00000000699996000069999600000000',
+    '00000000669996600669996600000000',
+    '00000000069999666699996000000000',
+    '00000000066999966999966000000000',
+    '00666666666699999999666666666600',
+    '00699999999999999999999999999600',
+    '00699999999999999999999999999600',
+    '00699999999999999999999999999600',
+    '00666666666666999966666666666600',
+    '00000000000006999960000000000000',
+    '00000000000006999960000000000000',
+    '00000000000006999960000000000000',
+    '00000000000006999960000000000000',
+    '00000000000006999960000000000000',
+    '00000000000066999966000000000000',
+    '00000000000069999996000000000000',
+    '00000000000069999996000000000000',
+    '00000000000069999996000000000000',
+    '00000000000069999996000000000000',
+    '00000000000069999996000000000000',
+    '00000000000069999996000000000000',
+    '00000000000069999996000000000000',
+    '00000000000066666666000000000000',
+].join('');
 
 function generateGlyph(rng, dream, mirrored, line, edge, ground, grain) {
   const code = (i, j) => dream[i * SIDE + (mirrored ? SIDE - 1 - j : j)];

@@ -111,6 +111,33 @@ input[type="search"]:focus {
   border-color: rgba(232, 232, 232, 0.7);
 }
 
+/* Dropdowns (the pattern menu), styled like the text inputs */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%23e8e8e8'/></svg>") no-repeat right 8px center;
+  border: 1px solid rgba(232, 232, 232, 0.3);
+  color: var(--text-primary);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 15.6px;
+  outline: none;
+  padding: 4px 24px 4px 8px;
+  line-height: normal;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  transition: border-color 0.15s;
+}
+
+select:hover,
+select:focus {
+  border-color: rgba(232, 232, 232, 0.7);
+}
+
+select option {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
 input::placeholder {
   opacity: 0.35;
 }
