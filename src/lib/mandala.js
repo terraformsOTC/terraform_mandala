@@ -1175,43 +1175,58 @@ const NAZCA_DREAMS = {
   ].join(''),
 };
 
-// The Ankh (James, 2026-11-12): our own drawing, so no credit — an oval loop, a
-// crossbar and a shaft flaring toward its foot, edged in 6 like the Eye of Horus.
-// Drawn by ~/ops/mandala-nazca/ankh.py (visual units: a row is 1.5 columns tall).
+// The Ankh (James, 2026-11-12, redrawn the same day: "finer linework, like the eye of
+// horus", gradients rather than blocks, a sense of perspective). Our own drawing, so no
+// credit: a relief standing in perspective — the front face outlined by a one-cell line
+// (9) and shaded light at the top to darker at the foot (ramp digits 8..3), its depth
+// extruded up and to the right with side faces darkening as they recede (4..1) and
+// edged in 6. Drawn by ~/ops/mandala-nazca/ankh2.py (`plain`; visual units: a row is
+// 1.5 columns tall). Digits other than 9/6/0 are ramp steps — see generateGlyph.
 const ANKH_DREAM = [
     '00000000000000000000000000000000',
-    '00000000000006666660000000000000',
-    '00000000000666999966600000000000',
-    '00000000006699999999660000000000',
-    '00000000066999999999966000000000',
-    '00000000069999666699996000000000',
-    '00000000069996600669996000000000',
-    '00000000669996000069996600000000',
-    '00000000699996000069999600000000',
-    '00000000699996000069999600000000',
-    '00000000669996600669996600000000',
-    '00000000069999666699996000000000',
-    '00000000066999966999966000000000',
-    '00666666666699999999666666666600',
-    '00699999999999999999999999999600',
-    '00699999999999999999999999999600',
-    '00699999999999999999999999999600',
-    '00666666666666999966666666666600',
-    '00000000000006999960000000000000',
-    '00000000000006999960000000000000',
-    '00000000000006999960000000000000',
-    '00000000000006999960000000000000',
-    '00000000000006999960000000000000',
-    '00000000000066999966000000000000',
-    '00000000000069999996000000000000',
-    '00000000000069999996000000000000',
-    '00000000000069999996000000000000',
-    '00000000000069999996000000000000',
-    '00000000000069999996000000000000',
-    '00000000000069999996000000000000',
-    '00000000000069999996000000000000',
-    '00000000000066666666000000000000',
+    '00000000000000006666000000000000',
+    '00000000000006664332660000000000',
+    '00000000000999999443226000000000',
+    '00000000009899699994322600000000',
+    '00000000098936000989432600000000',
+    '00000000099426000099432600000000',
+    '00000000989326000098943600000000',
+    '00000000994326000098943600000000',
+    '00000000994326000097942600000000',
+    '00000000979432600097932600000000',
+    '00000000099432260099436000000000',
+    '00000000097943326979360000000000',
+    '00006666619799499993116666666660',
+    '00064444333955959333333444443260',
+    '00999999999555555999999999943660',
+    '00999999999995559999999999966000',
+    '00000000000009594326000000000000',
+    '00000000000009594326000000000000',
+    '00000000000009594326000000000000',
+    '00000000000009494326000000000000',
+    '00000000000009494326000000000000',
+    '00000000000094494326000000000000',
+    '00000000000094449326000000000000',
+    '00000000000094449436000000000000',
+    '00000000000093339432600000000000',
+    '00000000000093339432600000000000',
+    '00000000000093339432600000000000',
+    '00000000000093339436600000000000',
+    '00000000000093339660000000000000',
+    '00000000000999999000000000000000',
+    '00000000000000000000000000000000',
 ].join('');
+
+// A glyph digit: 9 the line, 6 the edge, 0 the ground, and any other digit d a step of a
+// ramp between them — ground + (line - ground) * d / 8 — so at the default heights (line
+// 8, ground 0) a ramp digit is its own height, and the ramps follow the sliders. Only the
+// Ankh uses ramp digits; Horus and the Nazca figures are 9/6/0 throughout.
+function glyphHeight(c, line, edge, ground) {
+  if (c === '9') return line;
+  if (c === '6') return edge;
+  if (c === '0') return ground;
+  return Math.max(0, Math.min(9, Math.round(ground + ((line - ground) * Number(c)) / 8)));
+}
 
 function generateGlyph(rng, dream, mirrored, line, edge, ground, grain) {
   const code = (i, j) => dream[i * SIDE + (mirrored ? SIDE - 1 - j : j)];
@@ -1224,7 +1239,7 @@ function generateGlyph(rng, dream, mirrored, line, edge, ground, grain) {
   for (let i = 0; i < SIDE; i++) {
     for (let j = 0; j < SIDE; j++) {
       const c = code(i, j);
-      let v = c === '9' ? line : c === '6' ? edge : ground;
+      let v = glyphHeight(c, line, edge, ground);
       if (c === '0' && grain > 0 && speckle.length) v = speckle[Math.floor(rng() * speckle.length)];
       grid[i][j] = String(v);
     }
