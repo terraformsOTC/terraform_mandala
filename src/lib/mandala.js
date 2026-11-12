@@ -61,13 +61,13 @@ export const DEFAULTS = {
 export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
 export const RING_STYLES = ['concentric', 'wheel'];
 // Glyph sets and the glyphs in each (James, 2026-11-12: the menu reads
-// glyphs > hieroglyphs > eye of horus / eye of ra / ankh, glyphs > nazca > condor...).
+// glyphs > hieroglyphs > eye of horus / eye of ra / ankh / sower, glyphs > nazca > condor...).
 // 'horus' was the hieroglyph set's name until then; old links still open it.
 export const GLYPH_SETS = ['hieroglyphs', 'nazca'];
-export const HIEROGLYPHS = ['horus', 'ra', 'ankh'];
+export const HIEROGLYPHS = ['horus', 'ra', 'ankh', 'sower'];
 export const NAZCA_FIGURES = ['hummingbird', 'monkey', 'spider', 'condor'];
 export const GLYPH_FIGURES = { hieroglyphs: HIEROGLYPHS, nazca: NAZCA_FIGURES };
-export const FIGURE_LABELS = { horus: 'eye of horus', ra: 'eye of ra', ankh: 'ankh' };
+export const FIGURE_LABELS = { horus: 'eye of horus', ra: 'eye of ra', ankh: 'ankh', sower: 'sower' };
 export const PATTERNS = ['classic', 'rings', 'temple', 'glyphs', 'escher'];
 
 export function normalizeGlyphSet(set) {
@@ -111,7 +111,7 @@ export function generateMandala(opts = {}) {
 
   let grid;
   if (isGlyph) {
-    const dream = glyphSet === 'nazca' ? NAZCA_DREAMS[figure] : figure === 'ankh' ? ANKH_DREAM : HORUS_DREAM;
+    const dream = glyphSet === 'nazca' ? NAZCA_DREAMS[figure] : HIEROGLYPH_DREAMS[figure] ?? HORUS_DREAM;
     const mirrored = glyphSet === 'hieroglyphs' && figure === 'ra';
     grid = generateGlyph(rng, dream, mirrored, glyphLine, glyphEdge, glyphGround, grain);
   } else if (isEscher) {
@@ -1217,10 +1217,55 @@ const ANKH_DREAM = [
     '00000000000000000000000000000000',
 ].join('');
 
+// The Sower, Gardiner A60 𓁅 (U+13045), a man casting seed (James, 2026-11-12: "try this
+// character alongside the ankh"). Traced from the Noto Sans Egyptian Hieroglyphs glyph
+// (SIL Open Font License) by ~/ops/mandala-nazca/sower/sower.py: a one-cell outline (9);
+// each part of the body with its own gradient (wig darkening down the back, face lit,
+// torso lit from the upper left, arms dark at the shoulder and lit at the hand, kilt and
+// legs darkening toward the ground); the head placed by hand (nose, eye, fringe); and the
+// thrown seed as 15 dashes whose heights rise and fall along the arc (4 5 7 8 9 8 7 5), so
+// the animation runs along the throw. Stretched 1.22x in height to stand in the parcel.
+const SOWER_DREAM = [
+    '00000000000000000000000000000000',
+    '00000000000000000000000000000000',
+    '00000000000004455577888990000000',
+    '00000000000554099990000008807000',
+    '00000000070000975549000000000790',
+    '00000000700000989939000000009990',
+    '00000008000009898739000000009990',
+    '00000990000000987929000000093900',
+    '00000900000000977590000000949000',
+    '00008000000000095499000009590000',
+    '00000000000009987775999995590000',
+    '00770000000093877755999999900000',
+    '00500000000939975554900000000000',
+    '05500000000949095549000000000000',
+    '04000000000990095449000000000000',
+    '04000000009590099999000000000000',
+    '00999999995900097777900000000000',
+    '09999999999000095555900000000000',
+    '00000000000000944444900000000000',
+    '00000000000000944444900000000000',
+    '00000000000009333333900000000000',
+    '00000000000009222222900000000000',
+    '00000000000099999999900000000000',
+    '00000000000094900095900000000000',
+    '00000000000094900095900000000000',
+    '00000000000093900009490000000000',
+    '00000000000939000009390000000000',
+    '00000000000939000009390000000000',
+    '00000000000990000009290000000000',
+    '00000000999290000992290000000000',
+    '00000000999900000999900000000000',
+    '00000000000000000000000000000000',
+].join('');
+
+const HIEROGLYPH_DREAMS = { horus: HORUS_DREAM, ra: HORUS_DREAM, ankh: ANKH_DREAM, sower: SOWER_DREAM };
+
 // A glyph digit: 9 the line, 6 the edge, 0 the ground, and any other digit d a step of a
 // ramp between them — ground + (line - ground) * d / 8 — so at the default heights (line
-// 8, ground 0) a ramp digit is its own height, and the ramps follow the sliders. Only the
-// Ankh uses ramp digits; Horus and the Nazca figures are 9/6/0 throughout.
+// 8, ground 0) a ramp digit is its own height, and the ramps follow the sliders. The Ankh
+// and the Sower use ramp digits; Horus and the Nazca figures are 9/6/0 throughout.
 function glyphHeight(c, line, edge, ground) {
   if (c === '9') return line;
   if (c === '6') return edge;
