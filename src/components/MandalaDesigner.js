@@ -9,6 +9,7 @@ import ParcelPreview from './ParcelPreview';
 import ExportGifButton from './ExportGifButton';
 import { randomSeed } from '@/lib/seedrandom';
 import { originGlyphSet, isOriginStatus } from '@/lib/originGlyphs';
+import { antennaOf, withAntenna } from '@/lib/previewHtml';
 
 // On-chain font shapes the BIOMECODE/BLADE glyphs into full-cell decorative
 // forms. Without it, biomes whose BIOMECODE chars sit in obscure Unicode
@@ -22,8 +23,15 @@ export default function MandalaDesigner({
   onParamsChange,
   renderer,
   onRendererChange,
+  antenna,
+  onAntennaChange,
   walletAddress,
 }) {
+  // The antenna shown: the user's choice, else the parcel's own. The preview and the GIF
+  // export both get the parcel data with ANTENNA switched to match.
+  const ownAntenna = antennaOf(animData);
+  const shownAntenna = antenna ?? ownAntenna;
+  const viewData = useMemo(() => withAntenna(animData, shownAntenna), [animData, shownAntenna]);
   const generated = useMemo(() => {
     try {
       return generateMandala(params);
@@ -65,20 +73,57 @@ export default function MandalaDesigner({
       <div className="flex flex-col gap-3 items-start">
         <h2 className="text-lg opacity-90">[preview — #{animData?.tokenId}]</h2>
 
-        <RendererToggle renderer={renderer} onChange={onRendererChange} />
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <RendererToggle renderer={renderer} onChange={onRendererChange} />
+          {ownAntenna && (
+            <AntennaToggle
+              own={ownAntenna}
+              shown={shownAntenna}
+              onChange={(a) => onAntennaChange?.(a === ownAntenna ? null : a)}
+            />
+          )}
+        </div>
 
         {animData && <ParcelMeta animData={animData} />}
 
         <ParcelPreview
-          animData={animData}
+          animData={viewData}
           heightmap={generated.heightmap}
         />
         <ExportGifButton
-          animData={animData}
+          animData={viewData}
           heightmap={generated.heightmap}
           tokenId={animData?.tokenId}
         />
       </div>
+    </div>
+  );
+}
+
+// Antenna on/off for the preview (v2 only). The parcel's own setting is on-chain; this
+// only shows how the drawing would animate either way.
+function AntennaToggle({ own, shown, onChange }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs opacity-50 uppercase tracking-wider">antenna:</span>
+      <div className="flex gap-2">
+        {['on', 'off'].map((a) => (
+          <button
+            key={a}
+            type="button"
+            className="btn-primary btn-sm text-xs"
+            style={{ opacity: shown === a ? 1 : 0.5 }}
+            disabled={shown === a}
+            onClick={() => onChange?.(a)}
+            title={a === own
+              ? `this parcel's antenna is ${own}`
+              : `preview with the antenna ${a} (this parcel's is ${own}; it is switched on-chain, see antenna info)`}
+          >
+            {a}
+          </button>
+        ))}
+      </div>
+      {shown !== own && <span className="text-xs opacity-50">(parcel&apos;s is {own})</span>}
     </div>
   );
 }

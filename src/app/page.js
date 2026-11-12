@@ -12,7 +12,7 @@ import { ESCHER_DESIGNS, escherTones } from '@/lib/escher';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'glyph', 'line', 'edge', 'ground', 'eye', 'figure', 'grain', 'escher', 'tones', 'renderer',
+  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'glyph', 'line', 'edge', 'ground', 'eye', 'figure', 'grain', 'escher', 'tones', 'renderer', 'antenna',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -50,6 +50,17 @@ function HomeInner() {
 
   const [params, setParams] = useState(() => paramsFromUrl(searchParams) || defaultParams());
   const [renderer, setRenderer] = useState(() => rendererFromUrl(searchParams));
+  // Antenna to preview with: null = the parcel's own (its HTML's ANTENNA), else 'on'/'off'.
+  // A link can carry it; loading another parcel goes back to that parcel's own.
+  const [antenna, setAntenna] = useState(() => {
+    const a = searchParams.get('antenna');
+    return a === 'on' || a === 'off' ? a : null;
+  });
+  const firstTokenRef = useRef(true);
+  useEffect(() => {
+    if (firstTokenRef.current) { firstTokenRef.current = false; return; }
+    setAntenna(null);
+  }, [selectedTokenId]);
 
   const walletRef = useRef(walletAddress);
   useEffect(() => { walletRef.current = walletAddress; }, [walletAddress]);
@@ -195,10 +206,11 @@ function HomeInner() {
     const tones = escherTones(params.escherDesign, params.escherTones);
     if (tones.join() !== ESCHER_DESIGNS[params.escherDesign].tones.join()) next.set('tones', tones.join(','));
     if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
+    if (antenna) next.set('antenna', antenna);
     const qs = next.toString();
     const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
     window.history.replaceState(null, '', url);
-  }, [params, selectedTokenId, renderer]);
+  }, [params, selectedTokenId, renderer, antenna]);
 
   return (
     <div className="content-wrapper">
@@ -282,6 +294,8 @@ function HomeInner() {
                 onParamsChange={setParams}
                 renderer={renderer}
                 onRendererChange={setRenderer}
+                antenna={antenna}
+                onAntennaChange={setAntenna}
                 walletAddress={walletAddress}
               />
             )}

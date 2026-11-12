@@ -34,6 +34,27 @@ export function buildPreviewHtml(animData, heightmap) {
   return out;
 }
 
+// The parcel's antenna as its v2 HTML sets it (`let ANTENNA=0|1`): 'on', 'off', or null
+// when the HTML has none (v0). An antenna is switched on-chain (see /antenna); a v2
+// parcel without one animates differently, so the designer can preview either.
+export function antennaOf(animData) {
+  const m = animData?.html?.match(/\blet\s+ANTENNA\s*=\s*(\d+)/);
+  if (!m) return null;
+  return Number(m[1]) > 0 ? 'on' : 'off';
+}
+
+// The parcel data with its antenna switched for viewing (James, 2026-11-12). Only the
+// script's ANTENNA changes — the preview and the GIF export (canvasRenderer reads ANTENNA
+// from the same HTML) then animate as the parcel would with its antenna that way.
+export function withAntenna(animData, antenna) {
+  const own = antennaOf(animData);
+  if (!own || (antenna !== 'on' && antenna !== 'off') || antenna === own) return animData;
+  return {
+    ...animData,
+    html: animData.html.replace(/\blet\s+ANTENNA\s*=\s*\d+/, `let ANTENNA=${antenna === 'on' ? 1 : 0}`),
+  };
+}
+
 // The API reads the parcel with an empty canvas on v2, whose cells are all class a, so
 // only `chars.a` comes back. BIOMECODE holds the parcel's nine glyphs, a to i.
 function cellChars({ chars, biomecode }) {
