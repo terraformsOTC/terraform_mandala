@@ -61,13 +61,13 @@ export const DEFAULTS = {
 export const TEMPLE_STYLES = ['cathedral', 'wat', 'ziggurat'];
 export const RING_STYLES = ['concentric', 'wheel'];
 // Glyph sets and the glyphs in each (James, 2026-11-12: the menu reads
-// glyphs > hieroglyphs > eye of horus / eye of ra / ankh / moon god, glyphs > nazca > condor...).
+// glyphs > hieroglyphs > eye of horus / eye of ra / ankh / moon god / frog, glyphs > nazca > condor...).
 // 'horus' was the hieroglyph set's name until then; old links still open it.
 export const GLYPH_SETS = ['hieroglyphs', 'nazca'];
-export const HIEROGLYPHS = ['horus', 'ra', 'ankh', 'moon'];
+export const HIEROGLYPHS = ['horus', 'ra', 'ankh', 'moon', 'frog'];
 export const NAZCA_FIGURES = ['hummingbird', 'monkey', 'spider', 'condor'];
 export const GLYPH_FIGURES = { hieroglyphs: HIEROGLYPHS, nazca: NAZCA_FIGURES };
-export const FIGURE_LABELS = { horus: 'eye of horus', ra: 'eye of ra', ankh: 'ankh', moon: 'moon god' };
+export const FIGURE_LABELS = { horus: 'eye of horus', ra: 'eye of ra', ankh: 'ankh', moon: 'moon god', frog: 'frog' };
 export const PATTERNS = ['classic', 'rings', 'temple', 'glyphs', 'escher'];
 
 export function normalizeGlyphSet(set) {
@@ -1180,49 +1180,48 @@ const NAZCA_DREAMS = {
   ].join(''),
 };
 
-// The Ankh (James, 2026-11-12, redrawn the same day: "finer linework, like the eye of
-// horus", gradients rather than blocks, a sense of perspective). Our own drawing, so no
-// credit: a relief standing in perspective — the front face outlined by a one-cell line
-// (9) and shaded light at the top to darker at the foot (ramp digits 8..3), its depth
-// extruded up and to the right with side faces darkening as they recede (4..1) and
-// edged in 6. Third drawing (round 5, same day: "make the linework somewhat thinner but keep the
-// current visual effect"): the front face is outlined only where it meets the ground, not
-// where it meets its own depth, which halves the line. Drawn by ~/ops/mandala-nazca/ankh3.py
-// (`outline="ground"`, from ankh2.py `plain`; visual units: a row is
-// 1.5 columns tall). Digits other than 9/6/0 are ramp steps — see generateGlyph.
+// The Ankh (James, 2026-11-12). Fourth drawing, the same day, after the moon god: traced
+// from the Noto Sans Egyptian Hieroglyphs Ankh by the moon god's method
+// (~/ops/mandala-nazca/ankh4/ankh4.py, `depth`; tracer ../trace.py) — framed to fill the
+// parcel's height, the glyph's own double lines one to two cells wide (9, 6 where a
+// stroke grazes), a ramp inside each part (loop lit at its crown and darkening down both
+// sides, crossbar lit at the middle, shaft darkening to the foot), widened 1.3x, and
+// extruded up and right three steps like the third drawing's relief (side faces 4..2,
+// rimmed in 6). Earlier drawings: ankh.py, ankh2.py (relief in perspective), ankh3.py
+// (outline only against the ground).
 const ANKH_DREAM = [
-    '00000000000000000000000000000000',
-    '00000000000000006666000000000000',
-    '00000000000006664332660000000000',
-    '00000000000998888443226000000000',
-    '00000000009888699884322600000000',
-    '00000000098836000988432600000000',
-    '00000000098426000098432600000000',
-    '00000000988326000098843600000000',
-    '00000000984326000098843600000000',
-    '00000000974326000097742600000000',
-    '00000000977432600097732600000000',
-    '00000000097432260097436000000000',
-    '00000000097743326977360000000000',
-    '00006666617777477773116666666660',
-    '00064444333555555333333444443260',
-    '00955555555555555555555555543660',
-    '00999999999995555555999999966000',
-    '00000000000009554326000000000000',
-    '00000000000009554326000000000000',
-    '00000000000009554326000000000000',
-    '00000000000009444326000000000000',
-    '00000000000009444326000000000000',
-    '00000000000094444326000000000000',
-    '00000000000094444326000000000000',
-    '00000000000094444436000000000000',
-    '00000000000093333432600000000000',
-    '00000000000093333432600000000000',
-    '00000000000093333432600000000000',
-    '00000000000093333436600000000000',
-    '00000000000093333660000000000000',
-    '00000000000999999000000000000000',
-    '00000000000000000000000000000000',
+    '00000000063333333333333360000000',
+    '00000006999999999999994336600000',
+    '00000699986999999968899943366000',
+    '00009967999666000699997996436000',
+    '00069769946000000000099799433600',
+    '00099799436000000000009679643600',
+    '00099799436000000000009679646000',
+    '00069569433600000000069569436000',
+    '00009959943360000000099599460000',
+    '00006965964336000000995994600000',
+    '00000994696433600009946943600000',
+    '00000099469643360099469646000000',
+    '00000009936964336993696460000000',
+    '00000000993996439936964600000000',
+    '00000000099399699369666000000000',
+    '00066666629966993996600066666660',
+    '09999664333696699943366669994336',
+    '09966999999999999999999996696436',
+    '09936699999999999999999966396660',
+    '09999966600009994336066699996000',
+    '00000000000009999436000000000000',
+    '00000000000009699436000000000000',
+    '00000000000069599436000000000000',
+    '00000000000099569433600000000000',
+    '00000000000099449643600000000000',
+    '00000000000099449943600000000000',
+    '00000000000096339943600000000000',
+    '00000000000693339943600000000000',
+    '00000000000993336943360000000000',
+    '00000000000992222964360000000000',
+    '00000000000992222994660000000000',
+    '00000000000999999996000000000000',
 ].join('');
 
 // The moon god, Gardiner C22 𓁳 (U+13073): a seated falcon-headed god wearing the moon, a
@@ -1268,12 +1267,53 @@ const MOON_DREAM = [
     '00999999999999999999999999999900',
 ].join('');
 
-const HIEROGLYPH_DREAMS = { horus: HORUS_DREAM, ra: HORUS_DREAM, ankh: ANKH_DREAM, moon: MOON_DREAM };
+// The frog, Gardiner I7 𓆏 (U+1318F), Heqet's sign (James, 2026-11-12: "add a drawing for
+// 𓆏 like the falcon head god"). Traced like the moon god from the Noto Sans Egyptian
+// Hieroglyphs glyph (~/ops/mandala-nazca/frog/frog.py): wider than tall, so it fills the
+// parcel's width, stretched 1.3x in height; its strokes are finer than a cell at this
+// size, so lower ink thresholds keep them whole. Ramps: body lit from head and back to the
+// belly, the head lit round the eye, the haunch from the knee; the eye placed by hand.
+const FROG_DREAM = [
+    '00000000000000000000000000000000',
+    '00000000000000000000000000000000',
+    '00000000000000000000000000000000',
+    '00000000000000000000000000000000',
+    '00000000000000000000000000000000',
+    '09999999990000000000000000000000',
+    '99577766599000000000000000000000',
+    '99777777559990000000000000000000',
+    '99999977755599990000000000000000',
+    '09989897775544499990000000000000',
+    '06999997775544444469960000000000',
+    '00998799755544444444499000000000',
+    '00099777555444444444439900000000',
+    '00009555554444444333333696000000',
+    '00006955444443333333333339600000',
+    '00000944433333333333333333960000',
+    '00000993333333333333333393396000',
+    '00000093333333333333333369229000',
+    '00000099393333333333332222966900',
+    '00000009996393333322222222296900',
+    '00000000999393222222223333339690',
+    '00000000099292222222999994439990',
+    '00000000069292222229934499943996',
+    '00000000096692222229936995996999',
+    '00009000092969926296994499949999',
+    '06999996999900999999699944999299',
+    '09999699929000999996999999939999',
+    '99999999990000699999999999926990',
+    '00009900000000000696000009999000',
+    '00000000000000000000000000000000',
+    '00000000000000000000000000000000',
+    '00000000000000000000000000000000',
+].join('');
+
+const HIEROGLYPH_DREAMS = { horus: HORUS_DREAM, ra: HORUS_DREAM, ankh: ANKH_DREAM, moon: MOON_DREAM, frog: FROG_DREAM };
 
 // A glyph digit: 9 the line, 6 the edge, 0 the ground, and any other digit d a step of a
 // ramp between them — ground + (line - ground) * d / 8 — so at the default heights (line
 // 8, ground 0) a ramp digit is its own height, and the ramps follow the sliders. The Ankh,
-// the moon god and the Nazca figures (their enclosed areas, since 2026-11-12) use ramp
+// the moon god, the frog and the Nazca figures (their enclosed areas, since 2026-11-12) use ramp
 // digits; Horus is 9/6/0 throughout.
 function glyphHeight(c, line, edge, ground) {
   if (c === '9') return line;

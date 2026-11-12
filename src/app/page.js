@@ -297,7 +297,7 @@ function HomeInner() {
 // The Nazca glyphs are our own drawings, so they credit no one (James, 2026-11-05).
 function footerCredit(params) {
   if (params.algorithm === 'rings' && params.ringStyle === 'wheel') return <WheelCredit />;
-  // The Eye of Horus and its mirror, the Eye of Ra, copy a dreamt heightmap; the Ankh and the moon god are ours.
+  // The Eye of Horus and its mirror, the Eye of Ra, copy a dreamt heightmap; the Ankh, the moon god and the frog are ours.
   if (params.algorithm === 'glyphs' && normalizeGlyphSet(params.glyphSet) === 'hieroglyphs' && ['horus', 'ra'].includes(figureFor('hieroglyphs', params.figure))) return <HorusCredit />;
   return null;
 }
@@ -354,7 +354,7 @@ function paramsFromUrl(searchParams) {
   // Horus was a ring style until 2026-11-05; links from then must still open it.
   const oldHorusLink = algo === 'rings' && ring === 'horus';
   // The hieroglyph set was 'horus' until 2026-11-12, with the eye in `eye`
-  // (horus / ra); the glyph is now `figure` (horus / ra / ankh / moon).
+  // (horus / ra); the glyph is now `figure` (horus / ra / ankh / moon / frog).
   const glyphSet = normalizeGlyphSet(searchParams.get('glyph'));
   const figureParam = searchParams.get('figure') ?? (glyphSet === 'hieroglyphs' ? searchParams.get('eye') : null);
   const escherParam = searchParams.get('escher');

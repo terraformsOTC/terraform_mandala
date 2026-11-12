@@ -193,7 +193,8 @@ function along(x, y, [ax, ay], [bx, by]) {
   return ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy);
 }
 
-// ─── more tessellations (James, 2026-11-12: "be brave and experimental") ─────────
+// ─── more tessellations (James, 2026-11-12: "be brave and experimental"; of four tried
+// he kept penrose and cubes — alhambra stars and weave were removed the same day) ──
 // Penrose rhombs: the aperiodic tiling of thick (72°) and thin (36°) rhombs, built by de
 // Bruijn's pentagrid — every crossing of two of five families of parallel lines becomes a
 // rhomb. Never repeats, yet five-fold everywhere. Each rhomb is shaded along its long
@@ -236,48 +237,6 @@ function penrose([line, aLo, aHi, bLo, bHi]) {
   });
 }
 
-// Alhambra: the eight-pointed star and cross (khatam) of the Nasrid tilings Escher drew
-// at the Alhambra in 1922 and 1936. Stars on a square lattice, their points meeting;
-// crosses between. Each star is shaded by a ramp from its points in to its heart, each
-// cross by a ramp out from its centre, so the animation pulses in and out of the stars.
-function alhambra([line, sLo, sHi, cLo, cHi]) {
-  const P = 16;                                           // lattice spacing: two stars across
-  const R = P / 2, rIn = 0.56 * R;                        // points meet their neighbours'; deep notches
-  // |p| over the star's boundary radius in p's direction: <= 1 inside. The star is the
-  // polygon through the eight points (R, every 45°) and eight notches (rIn, between).
-  const starR = (lx, ly) => {
-    const d = Math.hypot(lx, ly);
-    if (d < 1e-9) return 0;
-    const sector = Math.PI / 8;
-    const th = mod(Math.atan2(ly, lx), 2 * sector);       // 0 at a point, sector at a notch
-    const [ax, ay] = [R, 0];
-    const [bx, by] = [rIn * Math.cos(sector), rIn * Math.sin(sector)];
-    const t = th <= sector ? th : 2 * sector - th;          // mirror into the first half-sector
-    const ux = Math.cos(t), uy = Math.sin(t);
-    // the ray at angle t meets segment a-b at distance: solve a + k(b - a) = rho u
-    const ex = bx - ax, ey = by - ay;
-    const rho = (ax * ey - ay * ex) / (ux * ey - uy * ex);
-    return d / rho;
-  };
-  const local = (x, y) => {
-    const i = Math.round(x / P), j = Math.round((y - P / 2) / P);
-    return [x - i * P, y - P / 2 - j * P];
-  };
-  const inStar = (x, y) => { const [lx, ly] = local(x, y); return starR(lx, ly) <= 1; };
-  const pts = [[0, 0], [0.5, 0], [-0.5, 0], [0, 0.75], [0, -0.75]];
-  const boundary = (f, x, y) => { const v = f(x, y); return pts.some(([dx, dy]) => f(x + dx, y + dy) !== v); };
-  return render((x, y) => {
-    if (boundary(inStar, x, y)) return line;
-    const [lx, ly] = local(x, y);
-    const rs = starR(lx, ly);
-    if (rs <= 1) return ramp(1 - rs, sLo, sHi);          // from the points in to the heart
-    // a cross: centred on the lattice's half steps
-    const cx = (Math.floor(x / P) + 0.5) * P, cy = (Math.floor((y - P / 2) / P) + 0.5) * P + P / 2;
-    const dc = Math.max(Math.abs(x - cx), Math.abs(y - cy)) / (P / 2);
-    return ramp(1 - dc, cLo, cHi);
-  });
-}
-
 // Cubes: tumbling blocks — a hexagonal tiling split into rhombs so every hexagon is a
 // cube seen from above its corner, Escher's favourite space-filling solid. Each face has
 // its own light: the top lit and fading to the front edge, the left mid-tone and the
@@ -306,29 +265,6 @@ function cubes([line, tLo, tHi, lLo, lHi, rLo, rHi]) {
   });
 }
 
-// Weave: a basket weave where height is depth. Vertical and horizontal strips, each
-// rising where it passes over a crossing and dipping where it passes under (a cosine
-// along its length, as a ramp of heights), so the animation travels along the strips and
-// over the crossings; the gaps between strips are holes through the cloth.
-function weave([gap, vLo, vHi, hLo, hHi]) {
-  const PV = 5, WV = 4;                                   // vertical strips: 4 columns, 1 gap
-  const PH = 6, WH = 4.5;                                 // horizontal strips: 3 rows, 1 gap
-  return render((x, y) => {
-    const xs = x + W, ys = y + H - 0.75;                  // from the top-left corner
-    const i = Math.floor(xs / PV), j = Math.floor(ys / PH);
-    const inV = xs - i * PV < WV, inH = ys - j * PH < WH;
-    // +1 over a crossing, -1 under: crossing (i, j) has the vertical strip on top when i+j is even
-    const hV = Math.cos((Math.PI * (ys - WH / 2)) / PH - Math.PI * i);
-    const hH = -Math.cos((Math.PI * (xs - WV / 2)) / PV - Math.PI * j);
-    if (inV && inH) {
-      return mod(i + j, 2) === 0 ? ramp((hV + 1) / 2, vLo, vHi) : ramp((hH + 1) / 2, hLo, hHi);
-    }
-    if (inV) return ramp((hV + 1) / 2, vLo, vHi);
-    if (inH) return ramp((hH + 1) / 2, hLo, hHi);
-    return gap;
-  });
-}
-
 // ─── catalogue ───────────────────────────────────────────────────────────────
 // id -> { label, category, tones: default heights, toneLabels, draw }.
 export const ESCHER_DESIGNS = {
@@ -351,14 +287,6 @@ export const ESCHER_DESIGNS = {
   penrose: {
     label: 'penrose rhombs', category: 'tessellations', draw: penrose,
     tones: [8, 1, 4, 5, 7], toneLabels: ['edges', 'thick from', 'thick to', 'thin from', 'thin to'],
-  },
-  alhambra: {
-    label: 'alhambra stars', category: 'tessellations', draw: alhambra,
-    tones: [8, 2, 7, 1, 3], toneLabels: ['lines', 'stars from', 'stars to', 'crosses from', 'crosses to'],
-  },
-  weave: {
-    label: 'weave', category: 'tessellations', draw: weave,
-    tones: [9, 2, 8, 1, 5], toneLabels: ['holes', 'warp from', 'warp to', 'weft from', 'weft to'],
   },
   cubes: {
     label: 'tumbling cubes', category: 'tessellations', draw: cubes,

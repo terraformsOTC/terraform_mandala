@@ -171,7 +171,7 @@ export default function MandalaControls({ params, onChange }) {
 //   classic  › symmetry (2-, 4-, 8-fold)
 //   rings    › concentric / wheel
 //   temple   › cathedral / wat / ziggurat
-//   glyphs   › hieroglyphs › eye of horus / eye of ra / ankh / moon god
+//   glyphs   › hieroglyphs › eye of horus / eye of ra / ankh / moon god / frog
 //            › nazca       › hummingbird / monkey / spider / condor
 //   escher   › spirals / tessellations › design
 // Picking a higher level resets the levels under it to their first choice.
