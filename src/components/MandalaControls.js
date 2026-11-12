@@ -20,6 +20,10 @@ export default function MandalaControls({ params, onChange }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* The seed only matters where something is random: not for the escher designs
+          (fixed drawings), and for the glyphs only when grain is on (James, 2026-11-12:
+          hide controls that don't change the drawing). */}
+      {!isEscher && !(isGlyphs && !params.grain) && (
       <Field label="seed">
         <div className="flex gap-2 items-center">
           <input
@@ -38,6 +42,7 @@ export default function MandalaControls({ params, onChange }) {
           </button>
         </div>
       </Field>
+      )}
 
       <PatternMenu params={params} update={update} escher={escher} />
 

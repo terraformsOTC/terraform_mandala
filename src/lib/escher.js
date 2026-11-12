@@ -4,7 +4,8 @@
 // rather than flat blocks: each height animates at its own phase, so a ramp makes the
 // animation flow along the drawing. Ported from ~/ops/mandala-escher/escher3.py, which
 // rendered every design through previewHtml.js on real parcels (stills and animated
-// captures); tested cell for cell against it.
+// captures); tested cell for cell against it until two eye fixes (whirlpools,
+// regular division) on 2026-11-12.
 //
 // Each design takes a few "tones" — line heights and the ends of its ramps — that the
 // user can set, because contrast depends on the parcel's palette. 9 is an empty cell
@@ -128,7 +129,10 @@ function regularDivision([line, aLo, aHi, bLo, bHi, eye]) {
       const [oi, oj] = owner(x0 + dx, y0 + dy);
       if (oi !== i || oj !== j) return line;
     }
-    if (Math.abs(x - ((i + 1) * P + rho * 0.45)) < 0.6 && Math.abs(y - ((j + 0.5) * P - 0.5)) < 0.8) return eye;
+    // The eye sits in the column just inside the head's base: further out (it was at
+    // rho * 0.45) the head is too small at this scale for any cell there to clear the
+    // outline test, so the eye never drew and its slider did nothing (James, 2026-11-12).
+    if (Math.abs(x - ((i + 1) * P + 0.2)) < 0.6 && Math.abs(y - ((j + 0.5) * P - 0.5)) < 0.8) return eye;
     if (Math.abs(x - ((i + 1) * P - 0.6)) < 0.45 && Math.abs(y - ((j + 0.5) * P + 0.6)) < 2.0) return line - 1;
     const dist = Math.hypot(x - (i + 0.5) * P, y - (j + 0.5) * P) / (P * 0.75);
     return mod(i + j, 2) === 0 ? ramp(1 - dist, aLo, aHi) : ramp(1 - dist, bLo, bHi);
