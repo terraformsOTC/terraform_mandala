@@ -1041,6 +1041,8 @@ const HORUS_DREAM = [
 // the monkey's spiral) is shaded by a ramp from its edge (2) to its middle (5), the open
 // desert left bare. ~/ops/mandala-nazca/round5/nazca_grad.py (`fill`; `echo` halos round
 // every line swamped the drawings).
+// The spider is symmetrical about column 15 (James, 2026-11-13): its left half mirrored onto
+// the right, which drops the shaded strip that had closed between two right-hand legs.
 const NAZCA_DREAMS = {
   hummingbird: [
     '00000000000000060000000000000000',
@@ -1111,18 +1113,18 @@ const NAZCA_DREAMS = {
     '00000099999999999999990000000000',
   ].join(''),
   spider: [
-    '00060060000000000000000000000000',
-    '00090090000000000000000060060000',
+    '00060060000000000000000060060000',
     '00090090000000000000000090090000',
-    '00009009000000000090000090090000',
-    '00000900900090000929000900900000',
-    '00000900900929000092909009000000',
+    '00090090000000000000000090090000',
+    '00009009000000000000000900900000',
+    '00000900900090000090009009000000',
+    '00000900900929000929009009000000',
     '00000900909290090092909009000000',
-    '00009009009290929092900909000000',
-    '00090090000999999999000092900000',
-    '00090009000009222900000923290000',
-    '00090000999999232999999233290000',
-    '00009000000092343292222222900000',
+    '00009009009290929092900900900000',
+    '00090090000999999999000090090000',
+    '00090009000009222900000900090000',
+    '00090000999999232999999000090000',
+    '00009000000092343290000000900000',
     '00000999999992343299999999000000',
     '00000000000092333290000000000000',
     '00009999999999222999999999900000',
@@ -1232,13 +1234,15 @@ const ANKH_DREAM = [
 // Horus uses it. A line drawing like Horus: the spaces the lines enclose are ground (0)
 // (James, 2026-11-12, after a version with ramps inside). Traced from the Noto Sans
 // Egyptian Hieroglyphs glyph (SIL OFL) by ~/ops/mandala-nazca/moon/moon.py (`lines`).
+// The one exception: the disk on its head is raised (James, 2026-11-13), shaded from its
+// rim (2) to its middle (5) like the Nazca fills (~/ops/mandala-nazca/round9/variants.py).
 const MOON_DREAM = [
     '00000000000000009999600000000000',
-    '00000000000000996000990000000000',
-    '00000000069006900000099009600000',
-    '00000000009909900000069099900000',
-    '00000000009996900000099999000000',
-    '00000000000999999606999996000000',
+    '00000000000000996222990000000000',
+    '00000000069006922333299009600000',
+    '00000000009909923343269099900000',
+    '00000000009996922232299999000000',
+    '00000000000999999626999996000000',
     '00000000000069999999999900000000',
     '00000000000006999999999000000000',
     '00000000000699990009909990000000',
@@ -1315,7 +1319,7 @@ const HIEROGLYPH_DREAMS = { horus: HORUS_DREAM, ra: HORUS_DREAM, ankh: ANKH_DREA
 // ramp between them — ground + (line - ground) * d / 8 — so at the default heights (line
 // 8, ground 0) a ramp digit is its own height, and the ramps follow the sliders. The Ankh
 // and the Nazca figures (their enclosed areas, since 2026-11-12) use ramp
-// digits; Horus, the moon god and the frog are 9/6/0 throughout.
+// digits, as does the moon god's disk (2026-11-13); Horus and the frog are 9/6/0 throughout.
 function glyphHeight(c, line, edge, ground) {
   if (c === '9') return line;
   if (c === '6') return edge;

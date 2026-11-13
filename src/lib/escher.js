@@ -285,15 +285,15 @@ export const ESCHER_DESIGNS = {
     tones: [6, 1, 3, 8], toneLabels: ['plain band', 'gradient from', 'gradient to', 'edge line'],
   },
   'regular-division': {
-    label: 'regular division', category: 'tessellations', draw: regularDivision,
+    label: 'regular', category: 'tessellations', draw: regularDivision,
     tones: [8, 1, 4, 5, 7, 9], toneLabels: ['outlines', 'creature 1 from', 'creature 1 to', 'creature 2 from', 'creature 2 to', 'eyes'],
   },
   penrose: {
-    label: 'penrose rhombs', category: 'tessellations', draw: penrose,
+    label: 'penrose', category: 'tessellations', draw: penrose,
     tones: [8, 1, 4, 5, 7], toneLabels: ['edges', 'thick from', 'thick to', 'thin from', 'thin to'],
   },
   cubes: {
-    label: 'tumbling cubes', category: 'tessellations', draw: cubes,
+    label: 'cubes', category: 'tessellations', draw: cubes,
     tones: [9, 7, 8, 4, 5, 1, 2], toneLabels: ['edges', 'tops from', 'tops to', 'left faces from', 'left faces to', 'right faces from', 'right faces to'],
   },
 };
