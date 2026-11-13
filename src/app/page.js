@@ -12,7 +12,7 @@ import { ESCHER_DESIGNS, escherTones } from '@/lib/escher';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
-  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'glyph', 'line', 'edge', 'ground', 'eye', 'figure', 'grain', 'escher', 'tones', 'renderer', 'antenna',
+  'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'glyph', 'line', 'edge', 'ground', 'pupil', 'eye', 'figure', 'grain', 'escher', 'tones', 'renderer', 'antenna',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -199,6 +199,7 @@ function HomeInner() {
     if (params.glyphLine !== DEFAULTS.glyphLine) next.set('line', String(params.glyphLine));
     if (params.glyphEdge !== DEFAULTS.glyphEdge) next.set('edge', String(params.glyphEdge));
     if (params.glyphGround !== DEFAULTS.glyphGround) next.set('ground', String(params.glyphGround));
+    if (params.glyphPupil !== DEFAULTS.glyphPupil) next.set('pupil', String(params.glyphPupil));
     // A glyph is written only when it isn't its set's first (the set's default).
     if (params.figure !== figureFor(params.glyphSet, null)) next.set('figure', params.figure);
     if (params.grain !== DEFAULTS.grain) next.set('grain', String(params.grain));
@@ -393,6 +394,7 @@ function paramsFromUrl(searchParams) {
     glyphLine: num('line', 0, 9, DEFAULTS.glyphLine),
     glyphEdge: num('edge', 0, 9, DEFAULTS.glyphEdge),
     glyphGround: num('ground', 0, 9, DEFAULTS.glyphGround),
+    glyphPupil: num('pupil', 0, 9, DEFAULTS.glyphPupil),
     figure: figureFor(glyphSet, figureParam),
     escherDesign,
     escherTones: escherTones(escherDesign, tonesParam),

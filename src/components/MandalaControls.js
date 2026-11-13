@@ -15,6 +15,9 @@ export default function MandalaControls({ params, onChange }) {
   const isWheel = isRings && params.ringStyle === 'wheel';
   const isGlyphs = params.algorithm === 'glyphs';
   const isEscher = params.algorithm === 'escher';
+  // The Eye of Horus / Ra has a one-cell pupil at its own height (James, 2026-11-13).
+  const hasPupil = isGlyphs && normalizeGlyphSet(params.glyphSet) === 'hieroglyphs'
+    && ['horus', 'ra'].includes(figureFor('hieroglyphs', params.figure));
   const escher = ESCHER_DESIGNS[params.escherDesign] ? params.escherDesign : Object.keys(ESCHER_DESIGNS)[0];
   const tones = escherTones(escher, params.escherTones);
 
@@ -73,6 +76,9 @@ export default function MandalaControls({ params, onChange }) {
             <Slider label="line height" isHeight value={params.glyphLine} min={0} max={9} onChange={(glyphLine) => update({ glyphLine })} />
             <Slider label="edge height" isHeight value={params.glyphEdge} min={0} max={9} onChange={(glyphEdge) => update({ glyphEdge })} />
             <Slider label="ground height" isHeight value={params.glyphGround} min={0} max={9} onChange={(glyphGround) => update({ glyphGround })} />
+            {hasPupil && (
+              <Slider label="pupil height" isHeight value={params.glyphPupil} min={0} max={9} onChange={(glyphPupil) => update({ glyphPupil })} />
+            )}
           </>
         )}
 

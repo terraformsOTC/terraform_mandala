@@ -306,6 +306,7 @@ export function defaultParams() {
     glyphLine: DEFAULTS.glyphLine,
     glyphEdge: DEFAULTS.glyphEdge,
     glyphGround: DEFAULTS.glyphGround,
+    glyphPupil: DEFAULTS.glyphPupil,
     figure: DEFAULTS.figure,
     escherDesign: DEFAULTS.escherDesign,
     escherTones: null,

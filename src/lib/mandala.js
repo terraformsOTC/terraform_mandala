@@ -49,6 +49,7 @@ export const DEFAULTS = {
                     // lines out of the ground; the Horus dream itself is 9 / 6 / 0
   glyphEdge: 6,
   glyphGround: 0,
+  glyphPupil: 4,    // the one-cell pupil in the Eye of Horus / Ra (James, 2026-11-13); 0 sinks it
   figure: 'horus',   // the glyph within the set; each set has its own (figureFor)
   escherDesign: ESCHER_DEFAULT,
   escherTones: null, // null = the design's own default heights (escher.js)
@@ -104,6 +105,7 @@ export function generateMandala(opts = {}) {
   const glyphLine = clampInt(opts.glyphLine ?? DEFAULTS.glyphLine, 0, 9);
   const glyphEdge = clampInt(opts.glyphEdge ?? DEFAULTS.glyphEdge, 0, 9);
   const glyphGround = clampInt(opts.glyphGround ?? DEFAULTS.glyphGround, 0, 9);
+  const glyphPupil = clampInt(opts.glyphPupil ?? DEFAULTS.glyphPupil, 0, 9);
   const figure = figureFor(glyphSet, opts.figure);
   const grain = clampInt(opts.grain ?? DEFAULTS.grain, 0, 1);
 
@@ -113,7 +115,7 @@ export function generateMandala(opts = {}) {
   if (isGlyph) {
     const dream = glyphSet === 'nazca' ? NAZCA_DREAMS[figure] : HIEROGLYPH_DREAMS[figure] ?? HORUS_DREAM;
     const mirrored = glyphSet === 'hieroglyphs' && figure === 'ra';
-    grid = generateGlyph(rng, dream, mirrored, glyphLine, glyphEdge, glyphGround, grain);
+    grid = generateGlyph(rng, dream, mirrored, glyphLine, glyphEdge, glyphGround, grain, glyphPupil);
   } else if (isEscher) {
     grid = generateEscher(opts.escherDesign, opts.escherTones);
   } else if (isWheel) {
@@ -993,7 +995,10 @@ export function isFourFold(hm) {
 // so edges may sit above the lines and the ground above both (the eye cut in).
 // Eye 'ra' is the mirror image (the Eye of Ra faces the other way). Grain (off/on,
 // seeded) speckles the ground one height either side of it, never onto the line or
-// edge height, so the eye stays clean. No symmetry: it is a copy.
+// edge height, so the eye stays clean. No symmetry: it is a copy, plus one cell of our own:
+// the pupil 'P' at the centre of the iris (James, 2026-11-13), at its own height
+// (glyphPupil, default 4; 0 sinks it). The iris is six cells wide, so the cell sits half a
+// cell left of its centre (right of it in the mirrored Eye of Ra).
 // ───────────────────────────────────────────────────────────────────────────
 
 const HORUS_DREAM = [
@@ -1009,7 +1014,7 @@ const HORUS_DREAM = [
   '60000000999999999999999900000000',
   '00000009999099999000069999000000',
   '00000999900099999900000099900000',
-  '00999990000099999900000000990000',
+  '00999990000099P99900000000990000',  // P: the pupil, at its own height (glyphPupil)
   '69990000000099999900000000099900',
   '00996000000099999900000000990900',
   '00069990000009999000000099900000',
@@ -1235,14 +1240,15 @@ const ANKH_DREAM = [
 // (James, 2026-11-12, after a version with ramps inside). Traced from the Noto Sans
 // Egyptian Hieroglyphs glyph (SIL OFL) by ~/ops/mandala-nazca/moon/moon.py (`lines`).
 // The one exception: the disk on its head is raised (James, 2026-11-13), shaded from its
-// rim (2) to its middle (5) like the Nazca fills (~/ops/mandala-nazca/round9/variants.py).
+// rim (2) to its middle like the Nazca fills, and symmetric about column 17.5 (the traced
+// interior was lopsided; ~/ops/mandala-nazca/round9/moon_disk.py).
 const MOON_DREAM = [
-    '00000000000000009999600000000000',
-    '00000000000000996222990000000000',
-    '00000000069006922333299009600000',
-    '00000000009909923343269099900000',
-    '00000000009996922232299999000000',
-    '00000000000999999626999996000000',
+    '00000000000000069999600000000000',
+    '00000000000000992222990000000000',
+    '00000000069006923333299009600000',
+    '00000000009909923443299099900000',
+    '00000000009996922332299999000000',
+    '00000000000999999229999996000000',
     '00000000000069999999999900000000',
     '00000000000006999999999000000000',
     '00000000000699990009909990000000',
@@ -1320,14 +1326,15 @@ const HIEROGLYPH_DREAMS = { horus: HORUS_DREAM, ra: HORUS_DREAM, ankh: ANKH_DREA
 // 8, ground 0) a ramp digit is its own height, and the ramps follow the sliders. The Ankh
 // and the Nazca figures (their enclosed areas, since 2026-11-12) use ramp
 // digits, as does the moon god's disk (2026-11-13); Horus and the frog are 9/6/0 throughout.
-function glyphHeight(c, line, edge, ground) {
+function glyphHeight(c, line, edge, ground, pupil) {
+  if (c === 'P') return pupil;
   if (c === '9') return line;
   if (c === '6') return edge;
   if (c === '0') return ground;
   return Math.max(0, Math.min(9, Math.round(ground + ((line - ground) * Number(c)) / 8)));
 }
 
-function generateGlyph(rng, dream, mirrored, line, edge, ground, grain) {
+function generateGlyph(rng, dream, mirrored, line, edge, ground, grain, pupil) {
   const code = (i, j) => dream[i * SIDE + (mirrored ? SIDE - 1 - j : j)];
   // Heights the ground may speckle to: within `grain` of it, never the line or edge height.
   const speckle = [];
@@ -1338,7 +1345,7 @@ function generateGlyph(rng, dream, mirrored, line, edge, ground, grain) {
   for (let i = 0; i < SIDE; i++) {
     for (let j = 0; j < SIDE; j++) {
       const c = code(i, j);
-      let v = glyphHeight(c, line, edge, ground);
+      let v = glyphHeight(c, line, edge, ground, pupil);
       if (c === '0' && grain > 0 && speckle.length) v = speckle[Math.floor(rng() * speckle.length)];
       grid[i][j] = String(v);
     }
