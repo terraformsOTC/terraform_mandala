@@ -49,7 +49,7 @@ export const DEFAULTS = {
                     // lines out of the ground; the Horus dream itself is 9 / 6 / 0
   glyphEdge: 6,
   glyphGround: 0,
-  glyphPupil: 4,    // the one-cell pupil in the Eye of Horus / Ra (James, 2026-11-13); 0 sinks it
+  glyphPupil: 4,    // the 2x2 pupil in the Eye of Horus / Ra (James, 2026-11-13); 0 sinks it
   figure: 'horus',   // the glyph within the set; each set has its own (figureFor)
   escherDesign: ESCHER_DEFAULT,
   escherTones: null, // null = the design's own default heights (escher.js)
@@ -997,8 +997,8 @@ export function isFourFold(hm) {
 // seeded) speckles the ground one height either side of it, never onto the line or
 // edge height, so the eye stays clean. No symmetry: it is a copy, plus one cell of our own:
 // the pupil 'P' at the centre of the iris (James, 2026-11-13), at its own height
-// (glyphPupil, default 4; 0 sinks it). The iris is six cells wide, so the cell sits half a
-// cell left of its centre (right of it in the mirrored Eye of Ra).
+// (glyphPupil, default 4; 0 sinks it): four cells, two by two (one cell until the same
+// day), centred in the six-cell-wide iris in both eyes (rows 12-13, columns 14-15).
 // ───────────────────────────────────────────────────────────────────────────
 
 const HORUS_DREAM = [
@@ -1014,8 +1014,8 @@ const HORUS_DREAM = [
   '60000000999999999999999900000000',
   '00000009999099999000069999000000',
   '00000999900099999900000099900000',
-  '00999990000099P99900000000990000',  // P: the pupil, at its own height (glyphPupil)
-  '69990000000099999900000000099900',
+  '00999990000099PP9900000000990000',  // P: the pupil, a 2x2 square at its own height (glyphPupil)
+  '69990000000099PP9900000000099900',
   '00996000000099999900000000990900',
   '00069990000009999000000099900000',
   '00000999999000990000999990000000',

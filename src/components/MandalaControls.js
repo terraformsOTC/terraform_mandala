@@ -15,7 +15,7 @@ export default function MandalaControls({ params, onChange }) {
   const isWheel = isRings && params.ringStyle === 'wheel';
   const isGlyphs = params.algorithm === 'glyphs';
   const isEscher = params.algorithm === 'escher';
-  // The Eye of Horus / Ra has a one-cell pupil at its own height (James, 2026-11-13).
+  // The Eye of Horus / Ra has a 2x2 pupil at its own height (James, 2026-11-13).
   const hasPupil = isGlyphs && normalizeGlyphSet(params.glyphSet) === 'hieroglyphs'
     && ['horus', 'ra'].includes(figureFor('hieroglyphs', params.figure));
   const escher = ESCHER_DESIGNS[params.escherDesign] ? params.escherDesign : Object.keys(ESCHER_DESIGNS)[0];
