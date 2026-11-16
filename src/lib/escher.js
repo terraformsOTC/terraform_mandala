@@ -204,6 +204,16 @@ function along(x, y, [ax, ay], [bx, by]) {
 // rhomb. Never repeats, yet five-fold everywhere. Each rhomb is shaded along its long
 // diagonal (thick and thin in their own ranges), so the ten orientations make the plane
 // read as stacked, tilted faces and the animation runs a different way in each.
+//
+// The equal offsets put a five-armed star of thick rhombs at the tiling's centre. Until
+// 2026-11-16 that centre sat on the parcel's middle, a cell corner, so the star's edge
+// along the vertical axis ran exactly between columns 15 and 16 and drew in neither: the
+// two arms beside it merged and the star looked lopsided (James: "make it 5-symmetry").
+// The star now sits on the centre of cell (16, 16) (PENROSE_CENTRE), that edge is one
+// column wide like the others, and the right half mirrors the left exactly. A row is
+// 1.5 columns tall, so cells cannot turn by 72°; of the centres tried, this one makes
+// the five arms render most alike (80% of cells match their turned copies, was 75%).
+const PENROSE_CENTRE = [0.5, 0.75];
 function penrose([line, aLo, aHi, bLo, bHi]) {
   const L = 6.4;                                          // edge length, visual units
   const gam = [0.2, 0.2, 0.2, 0.2, 0.2];                  // equal offsets: five-fold about the centre
@@ -226,7 +236,7 @@ function penrose([line, aLo, aHi, bLo, bHi]) {
               const kj = K[j] + (j === r ? dr : 0) + (j === s ? ds : 0);
               vx += kj * e[j][0]; vy += kj * e[j][1];
             }
-            return [vx * L, vy * L];
+            return [vx * L + PENROSE_CENTRE[0], vy * L + PENROSE_CENTRE[1]];
           };
           const pts = [vert(0, 0), vert(1, 0), vert(1, 1), vert(0, 1)];
           tiles.push({ pts, thick: s - r === 1 || s - r === 4 });
@@ -234,11 +244,14 @@ function penrose([line, aLo, aHi, bLo, bHi]) {
       }
     }
   }
-  // centre the tiling's middle on the parcel
-  return renderTiles(tiles, line, (t, x, y) => {
+  const grid = renderTiles(tiles, line, (t, x, y) => {
     const u = along(x, y, t.pts[0], t.pts[2]);
     return t.thick ? ramp(u, aLo, aHi) : ramp(u, bLo, bHi);
   });
+  // Mirror about column 16 (the star's axis) so rounding can't make the halves differ;
+  // column 0 has no partner and keeps its own cells.
+  for (const row of grid) for (let c = 17; c < SIDE; c++) row[c] = row[32 - c];
+  return grid;
 }
 
 // Cubes: tumbling blocks — a hexagonal tiling split into rhombs so every hexagon is a
