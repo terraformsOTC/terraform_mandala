@@ -27,7 +27,7 @@ const SHORT_ADDRESS = `${TERRAFORMS_ADDRESS.slice(0, 6)}…${TERRAFORMS_ADDRESS.
  * to daydream mode the same way (mode 'dream'), so its owner can replace the old
  * drawing without going to Etherscan.
  */
-export default function CommitPanel({ tokenId, heightmap, walletAddress, renderer, onRendererChange, onParcelRendererChange, onCommitted, note }) {
+export default function CommitPanel({ tokenId, heightmap, walletAddress, renderer, onRendererChange, onParcelRendererChange, onCommitted, note, blocked = null }) {
   const [stage, setStage] = useState('idle'); // idle | checking | confirm | signing | pending | done | error
   // Whether an error came from the pre-send checks or from sending; only the
   // former marks a checklist step as failed.
@@ -187,7 +187,8 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress, rendere
             Write this mandala to parcel #{tokenId} from your wallet. The site checks everything
             before you sign; nothing is sent until you confirm.
           </p>
-          <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => runChecks('commit')}>
+          {blocked && <p className="opacity-75 leading-relaxed" style={{ color: '#fbbf24' }}>{blocked}</p>}
+          <button type="button" className="btn-primary btn-sm text-xs self-start" disabled={!!blocked} onClick={() => runChecks('commit')}>
             [check & commit to #{tokenId}]
           </button>
         </>

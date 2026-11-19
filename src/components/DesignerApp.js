@@ -14,7 +14,7 @@ import { EXPERIMENTAL_DESIGNS, normalizeExperimental } from '@/lib/experimental'
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
   'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'glyph', 'line', 'edge', 'ground', 'pupil', 'eye', 'figure', 'grain', 'escher', 'tones', 'renderer', 'antenna',
-  'exp', 'shift', 'flow', 'bg', 'seal', 'salt', 'layout',
+  'exp', 'shift', 'flow', 'bg', 'seal', 'salt', 'layout', 'petal', 'bud',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -194,6 +194,8 @@ function DesignerInner({ variant }) {
       if (params.sealMode !== DEFAULTS.sealMode) next.set('seal', params.sealMode);
       if (!params.sealSalt) next.set('salt', 'off');
       if (params.sealLayout !== DEFAULTS.sealLayout) next.set('layout', params.sealLayout);
+      if (params.sealPetal != null) next.set('petal', String(params.sealPetal));
+      if (params.sealBud != null) next.set('bud', String(params.sealBud));
       if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
       if (antenna) next.set('antenna', antenna);
       const sq = next.toString();
@@ -355,7 +357,9 @@ function footerCredit(params) {
   if (params.algorithm === 'rings' && params.ringStyle === 'wheel') return <WheelCredit />;
   if (params.algorithm === 'seal') {
     // The flower layout hides seals in #6454's flower (the smaller one for sealed messages): credit its dreamer.
-    if (sealLayoutFor(params.sealMode, params.sealLayout) === 'flower') return <FlowerCredit small={params.sealMode === 'sealed'} />;
+    if (sealLayoutFor(params.sealMode, params.sealLayout) === 'flower') {
+      return <FlowerCredit small={params.sealMode === 'sealed'} changed={params.sealPetal != null || params.sealBud != null} />;
+    }
     return <>A seal hides a message, a sealed message or a commitment in the drawing. Decode one, and read the format, at <a href="/seal">/seal</a>.</>;
   }
   // Experimental designs are our own drawings; the footer names what each is after.
@@ -386,17 +390,17 @@ function DreamCredit({ dream }) {
   );
 }
 
-function FlowerCredit({ small }) {
+function FlowerCredit({ small, changed = false }) {
   const dream = MATHCASTLES_DREAMS.p6454;
   return (
     <>
-      {small ? 'The smaller flower is drawn after the ' : 'The flower copies the '}
+      {small ? 'The sunflower is drawn after the ' : changed ? 'The flower follows the ' : 'The flower copies the '}
       <a href={`https://terraformexplorer.xyz/dreams/${dream.tx}`} target="_blank" rel="noopener noreferrer">heightmap dreamt on parcel #{dream.token} ↗</a>{' '}
       by{' '}
       <a href={`https://terraformexplorer.xyz/dreamers/${dream.dreamer}`} target="_blank" rel="noopener noreferrer">
         {dream.dreamer.slice(0, 6)}…{dream.dreamer.slice(-4)} ↗
       </a>
-      {small ? '' : ', cell for cell'}; the seal hides in its grain. Decode one, and read the format, at <a href="/seal">/seal</a>.
+      {small || changed ? '' : ', cell for cell'}{changed ? ', at the petal and bud heights set here' : ''}; the seal hides in its grain. Decode one, and read the format, at <a href="/seal">/seal</a>.
     </>
   );
 }
@@ -507,5 +511,12 @@ function sealParamsFromUrl(searchParams) {
     sealSalt: searchParams?.get('salt') === 'off' ? 0 : 1,
     sealLayout: sealLayoutFor(mode, SEAL_LAYOUTS.includes(layout) ? layout : DEFAULTS.sealLayout),
     sealHeightmap: null,
+    sealPetal: height(searchParams?.get('petal')),
+    sealBud: height(searchParams?.get('bud')),
   };
+}
+// a flower part's height from the URL: 0-9, else as drawn (null)
+function height(raw) {
+  if (raw == null || !/^[0-9]$/.test(raw)) return null;
+  return Number(raw);
 }

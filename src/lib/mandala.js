@@ -1,6 +1,7 @@
 import { generateEscher, ESCHER_DEFAULT } from './escher.js';
 import { generateExperimental, EXPERIMENTAL_DEFAULT } from './experimental.js';
-import { SEAL_DEMOS } from './sealDemos.js';
+import { SEAL_DEMOS, SEAL_DEMO_VARIANTS } from './sealDemos.js';
+import { fieldOf, budOf, withHeights, SUNFLOWER_BUD, miniFlowerRows } from './sunflower.js';
 import { makeRng } from './seedrandom.js';
 import { validate } from './heightmap.js';
 
@@ -65,6 +66,8 @@ export const DEFAULTS = {
   sealSalt: 1,            // commitment only: 1 salted, 0 a plain SHA-256 (James: "add it as a toggle")
   sealLayout: 'flower',   // flower (in its grain; James 2026-11-19, the default) | eighth | quarter | pinwheel | mirror | rotation | plain
   sealHeightmap: null,    // the user's sealed drawing (never in the URL); null = the example
+  sealPetal: null,        // the flower's petal height (its top); null = as drawn (James, 2026-11-19)
+  sealBud: null,          // the flower's bud (centre) height; null = as drawn
   grain: 0,          // 0 off, 1 on
   spokeCount: 3,
   twist: 2,
@@ -104,6 +107,9 @@ export function figureFor(set, figure) {
   const list = GLYPH_FIGURES[normalizeGlyphSet(set)];
   return list.includes(figure) ? figure : list[0];
 }
+
+let FLOWER_BUD = null;
+const flowerBud = () => (FLOWER_BUD ??= budOf(MATHCASTLES_DREAMS.p6454.rows));
 
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
@@ -151,7 +157,16 @@ export function generateMandala(opts = {}) {
     // until then the layout's example. Its symmetry and integrity are seal.js's to check.
     const layout = sealLayoutFor(opts.sealMode, SEAL_LAYOUTS.includes(opts.sealLayout) ? opts.sealLayout : DEFAULTS.sealLayout);
     const demo = layout === 'flower' ? (opts.sealMode === 'sealed' ? 'miniflower' : 'flower') : layout;
-    const hm = /^[0-9]{1024}$/.test(opts.sealHeightmap ?? '') ? opts.sealHeightmap : SEAL_DEMOS[demo];
+    let hm = /^[0-9]{1024}$/.test(opts.sealHeightmap ?? '') ? opts.sealHeightmap : SEAL_DEMOS[demo];
+    // Before anything is sealed, the flower demo shows the petal and bud heights asked for (a seal
+    // made with [seal it] is drawn at them already). Only the drawing's own cells move, never the
+    // grain; so the demo then no longer reads as an inscription, and the maker says so.
+    if (layout === 'flower' && hm === SEAL_DEMOS[demo] && (opts.sealPetal != null || opts.sealBud != null)) {
+      const drawn = demo === 'miniflower' ? miniFlowerRows(SEAL_DEMO_VARIANTS.miniflower) : MATHCASTLES_DREAMS.p6454.rows;
+      const field = fieldOf(drawn);
+      const moved = withHeights(drawn, field, demo === 'miniflower' ? SUNFLOWER_BUD : flowerBud(), { petal: opts.sealPetal, bud: opts.sealBud }).join('');
+      hm = [...hm].map((ch, i) => (field[i] ? ch : moved[i])).join('');
+    }
     grid = Array.from({ length: SIDE }, (_, r) => hm.slice(r * SIDE, (r + 1) * SIDE).split(''));
   } else if (isExperimental) {
     grid = generateExperimental(opts.experimentalDesign, {

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SEAL_DEMO_TEXT } from '@/lib/sealDemos';
-import { SEAL_COVERS, coverForMode, grainCover } from '@/lib/sealCovers';
+import { SEAL_COVERS, coverForMode, grainCover, coverTops } from '@/lib/sealCovers';
 
 // Seals (James, 2026-11-17): write a commitment, a plain hash, a sealed message, an
 // inscription or a committed list into the heightmap; the commit panel then puts it on-chain
@@ -16,9 +16,9 @@ import { SEAL_COVERS, coverForMode, grainCover } from '@/lib/sealCovers';
 const loadSeal = () => import('@/lib/seal');
 
 export const SEAL_MODE_LABELS = { commitment: 'commitment', sealed: 'sealed message', inscription: 'inscription', list: 'list commitment' };
-export const SEAL_LAYOUT_LABELS = { flower: 'flower (grain)', eighth: 'eight-fold', quarter: 'four-fold', pinwheel: 'pinwheel', mirror: 'mirror', rotation: 'half-turn', plain: 'none' };
-// A sealed message goes into the smaller flower.
-export const sealLayoutLabel = (layout, mode) => (layout === 'flower' && mode === 'sealed' ? 'small flower (grain)' : SEAL_LAYOUT_LABELS[layout]);
+export const SEAL_LAYOUT_LABELS = { flower: 'flower', eighth: 'eight-fold', quarter: 'four-fold', pinwheel: 'pinwheel', mirror: 'mirror', rotation: 'half-turn', plain: 'none' };
+// A sealed message goes into the sunflower (James, 2026-11-19: "change the name to sunflower").
+export const sealLayoutLabel = (layout, mode) => (layout === 'flower' && mode === 'sealed' ? 'sunflower' : SEAL_LAYOUT_LABELS[layout]);
 const COVER_TRIES = 8;   // fresh speckles to try before a grain seal gives up (every kind fitted 30/30 at the first)
 const MAX_FILE = 256 * 1024 * 1024;
 const BOX = { border: '1px solid rgba(232,232,232,0.15)' };
@@ -37,7 +37,7 @@ const GRAIN_HELP = {
 };
 const GRAIN_NOTE = {
   flower: 'Hidden in the grain: the flower stays exactly as dreamt (#6454); only speckles of its field move, by one height.',
-  miniflower: 'Hidden in the grain of a smaller flower, whose wider field holds an encrypted message. Its petals are drawn a little differently for every seal, so each one is unique; only speckles move, by one height, and the speckle stays as dense whatever the message\'s length.',
+  miniflower: 'Hidden in the grain of the sunflower, whose wider field holds an encrypted message. Its petals are drawn a little differently for every seal, so each one is unique; only speckles move, by one height, and the speckle stays as dense whatever the message\'s length.',
 };
 
 export default function SealControls({ params, update, lastCommit }) {
@@ -122,7 +122,7 @@ export default function SealControls({ params, update, lastCommit }) {
         // A fresh speckle for every seal; when the trellis cannot reach a frame in it, another.
         let base = null;
         for (let t = 0; t < COVER_TRIES && !enc; t++) {
-          base = grainCover(cover);
+          base = grainCover(cover, undefined, { petal: params.sealPetal, bud: params.sealBud });
           try {
             enc = await Sl.encodeGrain({ ...input, heightmap: base.heightmap, alt: base.alt, size: SEAL_COVERS[cover].size ?? undefined });
           } catch (e) {
@@ -173,6 +173,15 @@ export default function SealControls({ params, update, lastCommit }) {
           options={[[1, 'salted'], [0, 'plain SHA-256']]}
           value={salted ? 1 : 0}
           onSelect={(v) => update({ sealSalt: v, sealHeightmap: null })}
+        />
+      )}
+      {isGrain && (
+        <PartHeights
+          tops={coverTops(cover)}
+          petal={params.sealPetal}
+          bud={params.sealBud}
+          // a seal is drawn at its heights: other heights mean sealing again
+          onChange={(patch) => update({ ...patch, sealHeightmap: null })}
         />
       )}
       <p className="opacity-70 leading-relaxed">{(isGrain && GRAIN_HELP[kind]) || HELP[kind]}</p>
@@ -226,10 +235,16 @@ export default function SealControls({ params, update, lastCommit }) {
           shares its first cells, the format&apos;s mark; the rest is the content.
         </p>
       )}
-      {!current && isGrain && (
+      {!current && isGrain && params.sealPetal == null && params.sealBud == null && (
         <p className="opacity-50 leading-relaxed">
-          On show: an example, an inscription of &ldquo;{SEAL_DEMO_TEXT}&rdquo; hidden in the {cover === 'miniflower' ? 'smaller ' : ''}flower&apos;s
+          On show: an example, an inscription of &ldquo;{SEAL_DEMO_TEXT}&rdquo; hidden in the {cover === 'miniflower' ? 'sunflower' : 'flower'}&apos;s
           grain. Your seal gets a fresh speckle of its own.
+        </p>
+      )}
+      {!current && isGrain && (params.sealPetal != null || params.sealBud != null) && (
+        <p className="opacity-50 leading-relaxed">
+          On show: the {cover === 'miniflower' ? 'sunflower' : 'flower'} at these heights, not sealed yet. [seal it] draws
+          your seal at them, with a fresh speckle.
         </p>
       )}
 
@@ -285,7 +300,7 @@ export default function SealControls({ params, update, lastCommit }) {
 }
 
 function counter(kind, src, { cap, stored, items, layout, tooLong, cover }) {
-  const where = layout === 'flower' ? `the ${cover === 'miniflower' ? 'smaller ' : ''}flower's grain` : `the ${SEAL_LAYOUT_LABELS[layout]} layout`;
+  const where = layout === 'flower' ? `the ${cover === 'miniflower' ? 'sunflower' : 'flower'}'s grain` : `the ${SEAL_LAYOUT_LABELS[layout]} layout`;
   if (kind === 'list') return `${items.length} item${items.length === 1 ? '' : 's'} (up to 256) — only their fingerprint is stored`;
   if (kind === 'commitment' || kind === 'hash') {
     if (src === 'digest') return 'the digest itself is stored';
@@ -309,7 +324,7 @@ function revealLinks(s, c) {
 
 function revealFile(s, c, links) {
   const L = ['TERRAFORM SEAL — keep this file private until you reveal.', `mode: ${s.kind}`,
-    s.grain ? `layout: flower — in the grain of ${s.grain.cover === 'miniflower' ? 'the smaller flower' : "#6454's flower"} (${s.grain.size}-byte frame)` : `layout: ${s.layout}`];
+    s.grain ? `layout: ${s.grain.cover === 'miniflower' ? 'sunflower' : 'flower'} — in the grain of ${s.grain.cover === 'miniflower' ? 'the sunflower' : "#6454's flower"} (${s.grain.size}-byte frame)` : `layout: ${s.layout}`];
   if (c) L.push(`parcel: #${c.tokenId}`, `transaction: ${c.txHash}`, `https://etherscan.io/tx/${c.txHash}`);
   else L.push('transaction: (not committed yet: save this file again after committing)');
   if (s.kind === 'sealed') L.push(`secret: ${s.reveal.secret}`);
@@ -327,6 +342,29 @@ function revealFile(s, c, links) {
   }
   L.push('', 'Decode or verify at https://terraformmandala.xyz/seal — the format and a reference decoder are there.');
   return L.join('\n');
+}
+
+// The flower's two heights (James, 2026-11-19: "toggle the petal and central seed bud heights
+// separately"). Each slider is the part's top height; the part moves as a whole (rims and gradient
+// keep their steps until they reach 0), so 0 lays it flat. null = as drawn.
+function PartHeights({ tops, petal, bud, onChange }) {
+  const row = (label, key, value, top) => (
+    <div className="flex flex-col gap-1">
+      <span className="opacity-60 uppercase tracking-wider">
+        {label} — {value ?? top}{value == null ? ' (as drawn)' : value === 9 ? ' (empty)' : ''}
+        {value != null && (
+          <button type="button" className="ml-2 opacity-70 hover:opacity-100 normal-case" onClick={() => onChange({ [key]: null })}>[as drawn]</button>
+        )}
+      </span>
+      <input type="range" min={0} max={9} step={1} value={value ?? top} aria-label={label} onChange={(e) => onChange({ [key]: Number(e.target.value) })} style={{ width: '100%' }} />
+    </div>
+  );
+  return (
+    <div className="flex flex-col gap-2">
+      {row('petal height', 'sealPetal', petal, tops.petal)}
+      {row('bud height', 'sealBud', bud, tops.bud)}
+    </div>
+  );
 }
 
 function Secret({ label, value }) {

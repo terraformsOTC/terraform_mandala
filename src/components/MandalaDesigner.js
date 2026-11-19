@@ -82,6 +82,11 @@ export default function MandalaDesigner({
           note={params.algorithm === 'seal' && params.sealMode !== 'inscription'
             ? 'This drawing is a seal. Save its reveal file before you sign: once it is on-chain, nothing else can open or prove it.'
             : null}
+          // The seal maker commits only a seal made here: the example on show before [seal it] is no
+          // one's seal (and at other petal or bud heights not a seal at all).
+          blocked={variant === 'seal' && !params.sealHeightmap
+            ? 'Seal your message first ([seal it] above): only a seal you made here can be committed.'
+            : null}
         />
         {generated.error && (
           <p className="text-xs" style={{ color: '#f87171' }}>
@@ -339,6 +344,8 @@ export function defaultParams() {
     sealSalt: DEFAULTS.sealSalt,
     sealLayout: DEFAULTS.sealLayout,
     sealHeightmap: null,
+    sealPetal: null,
+    sealBud: null,
     grain: DEFAULTS.grain,
     spokeCount: DEFAULTS.spokeCount,
     twist: DEFAULTS.twist,
