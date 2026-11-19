@@ -2,16 +2,24 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SEAL_DEMO_TEXT } from '@/lib/sealDemos';
+import { SEAL_COVERS, coverForMode, grainCover } from '@/lib/sealCovers';
 
 // Seals (James, 2026-11-17): write a commitment, a plain hash, a sealed message, an
 // inscription or a committed list into the heightmap; the commit panel then puts it on-chain
 // like any other drawing. Everything happens in this tab: the text, file, secret and salts are
 // never sent anywhere (not in the URL, not in any request; the site's CSP allows no other
 // origin) and nothing is stored — the reveal shown here, and its file, are the only copy.
+// The flower layout (James, 2026-11-19: "We are only going with messages encoded in grain") hides
+// the seal in the grain of #6454's flower instead of writing it into the digits: the flower as
+// dreamt for anything readable or fixed-size, the smaller flower for a sealed message
+// (sealCovers.js), each with a fresh speckle for every seal.
 const loadSeal = () => import('@/lib/seal');
 
 export const SEAL_MODE_LABELS = { commitment: 'commitment', sealed: 'sealed message', inscription: 'inscription', list: 'list commitment' };
-export const SEAL_LAYOUT_LABELS = { eighth: 'eight-fold', quarter: 'four-fold', pinwheel: 'pinwheel', mirror: 'mirror', rotation: 'half-turn', plain: 'none' };
+export const SEAL_LAYOUT_LABELS = { flower: 'flower (grain)', eighth: 'eight-fold', quarter: 'four-fold', pinwheel: 'pinwheel', mirror: 'mirror', rotation: 'half-turn', plain: 'none' };
+// A sealed message goes into the smaller flower.
+export const sealLayoutLabel = (layout, mode) => (layout === 'flower' && mode === 'sealed' ? 'small flower (grain)' : SEAL_LAYOUT_LABELS[layout]);
+const COVER_TRIES = 8;   // fresh speckles to try before a grain seal gives up (every kind fitted 30/30 at the first)
 const MAX_FILE = 256 * 1024 * 1024;
 const BOX = { border: '1px solid rgba(232,232,232,0.15)' };
 
@@ -22,12 +30,23 @@ const HELP = {
   inscription: 'Your text goes on-chain as it is, hidden in plain sight: it looks like noise, but anyone with the decoder can read it.',
   list: 'One secret per line, each with its own salt, committed as one fingerprint (a Merkle root). Reveal any line on its own, whenever you like; the others stay hidden.',
 };
+// In the flower's grain the sealed message is the grain's own, more compact kind, and texts are stored as they are.
+const GRAIN_HELP = {
+  sealed: 'Your text goes on-chain encrypted (a SHA-256 keystream, sealed by an HMAC-SHA256 tag), padded so even its length is hidden. Publish the secret whenever you like and anyone can open it straight from the chain. The seal opens with that one secret only.',
+  inscription: 'Your text goes on-chain as it is, hidden in plain sight: the flower looks as dreamt, but anyone with the decoder can read it.',
+};
+const GRAIN_NOTE = {
+  flower: 'Hidden in the grain: the flower stays exactly as dreamt (#6454); only speckles of its field move, by one height.',
+  miniflower: 'Hidden in the grain of the smaller flower, whose wider field holds an encrypted message; only speckles move, by one height, and every sealed flower looks alike.',
+};
 
 export default function SealControls({ params, update, lastCommit }) {
   const mode = params.sealMode;
   const salted = params.sealSalt !== 0;
   const kind = mode === 'commitment' && !salted ? 'hash' : mode;   // seal.js's mode
   const layout = params.sealLayout;
+  const isGrain = layout === 'flower';
+  const cover = isGrain ? coverForMode(kind) : null;
   const [text, setText] = useState('');
   const [source, setSource] = useState('text'); // text | file | digest (commitment, hash)
   const [file, setFile] = useState(null);       // { name, bytes, sha256 }
@@ -54,15 +73,18 @@ export default function SealControls({ params, update, lastCommit }) {
   const usesSource = kind === 'commitment' || kind === 'hash';
   const src = usesSource ? source : 'text';
 
-  // Stored size of the text, compression included, for the counter.
+  // Stored size of the text, compression included (never in a grain), for the counter.
   useEffect(() => {
     let live = true;
     if (!S || !(kind === 'inscription' || kind === 'sealed')) { setStored(null); return undefined; }
+    if (isGrain) { const n = S.textBytes(text).length; setStored({ bytes: n, raw: n }); return undefined; }
     S.storedTextLength(text).then((n) => live && setStored({ bytes: n, raw: S.textBytes(text).length }));
     return () => { live = false; };
-  }, [S, text, kind]);
+  }, [S, text, kind, isGrain]);
 
-  const cap = S ? S.sealCapacity(layout, kind) : null;
+  const cap = !S ? null
+    : isGrain ? (kind === 'inscription' || kind === 'sealed' ? S.grainTextCapacity(kind, SEAL_COVERS[cover].frame) : Infinity)
+      : S.sealCapacity(layout, kind);
   const items = useMemo(() => text.split(/\r\n?|\n/).map((t) => t.trim()).filter(Boolean), [text]);
   const tooLong = cap != null && stored && stored.bytes > cap;
   const ready = !busy && !tooLong && (
@@ -95,10 +117,29 @@ export default function SealControls({ params, update, lastCommit }) {
       else if (src === 'file') input.bytes = file.bytes;
       else if (src === 'digest') input.digest = digest;
       else input.text = text;
-      const enc = await Sl.encodeSeal(input);
-      // Read it straight back before showing it: the drawing must decode to what was sealed.
-      const dec = await Sl.decodeSeal(enc.heightmap);
-      let ok = dec && dec.mode === kind && dec.layout === layout && dec.fillerIntact;
+      let enc, dec, ok;
+      if (isGrain) {
+        // A fresh speckle for every seal; when the trellis cannot reach a frame in it, another.
+        let base = null;
+        for (let t = 0; t < COVER_TRIES && !enc; t++) {
+          base = grainCover(cover);
+          try {
+            enc = await Sl.encodeGrain({ ...input, heightmap: base.heightmap, alt: base.alt, size: SEAL_COVERS[cover].size ?? undefined });
+          } catch (e) {
+            if (!/too small/.test(e.message)) throw e;
+          }
+        }
+        if (!enc) throw new Error("the flower's grain could not hold this seal; try again, or pick a digit layout");
+        // Read it straight back: a grain seal, and only grain cells moved (the flower is as dreamt).
+        dec = await Sl.findSeal(enc.heightmap);
+        ok = dec && dec.carrier === 'grain' && dec.mode === kind && dec.size === enc.size && dec.fillerIntact
+          && [...enc.heightmap].every((v, i) => v === base.heightmap[i] || (base.alt[i] != null && Number(v) === base.alt[i]));
+      } else {
+        enc = await Sl.encodeSeal(input);
+        // Read it straight back before showing it: the drawing must decode to what was sealed.
+        dec = await Sl.decodeSeal(enc.heightmap);
+        ok = dec && dec.mode === kind && dec.layout === layout && dec.fillerIntact;
+      }
       const content = src === 'file' ? { bytes: file.bytes } : src === 'digest' ? { digest } : { text };
       if (ok && kind === 'inscription') ok = dec.text === Sl.normalizeText(text);
       if (ok && kind === 'sealed') ok = (await Sl.openSeal(dec, enc.reveal.secret)) === Sl.normalizeText(text);
@@ -109,7 +150,8 @@ export default function SealControls({ params, update, lastCommit }) {
       // The mode or layout changed while sealing: this seal is for neither; drop it.
       if (latest.current.kind !== kind || latest.current.layout !== layout) return;
       setSealed({
-        heightmap: enc.heightmap, kind, layout, reveal: enc.reveal, compressed: enc.compressed,
+        heightmap: enc.heightmap, kind, layout, reveal: enc.reveal, compressed: !!enc.compressed,
+        grain: isGrain ? { cover, size: enc.size, changed: enc.changed } : null,
         source: src, text: kind === 'list' ? null : Sl.normalizeText(text), file: src === 'file' ? { name: file.name, sha256: file.sha256 } : null,
       });
       latest.current.update({ sealHeightmap: enc.heightmap });
@@ -133,7 +175,8 @@ export default function SealControls({ params, update, lastCommit }) {
           onSelect={(v) => update({ sealSalt: v, sealHeightmap: null })}
         />
       )}
-      <p className="opacity-70 leading-relaxed">{HELP[kind]}</p>
+      <p className="opacity-70 leading-relaxed">{(isGrain && GRAIN_HELP[kind]) || HELP[kind]}</p>
+      {isGrain && <p className="opacity-60 leading-relaxed">{GRAIN_NOTE[cover]}</p>}
       {usesSource && (
         <Toggle
           label="content"
@@ -170,23 +213,32 @@ export default function SealControls({ params, update, lastCommit }) {
         />
       )}
       <span className="opacity-60" style={tooLong ? { color: '#f87171', opacity: 1 } : undefined}>
-        {counter(kind, src, { cap, stored, items, layout, tooLong })}
+        {counter(kind, src, { cap, stored, items, layout, tooLong, cover })}
       </span>
       <button type="button" className="btn-primary btn-sm text-xs self-start" disabled={!ready} onClick={seal}>
         {busy ? '[sealing…]' : '[seal it]'}
       </button>
       {error && <p style={{ color: '#f87171' }}>{error}</p>}
 
-      {!current && (
+      {!current && !isGrain && (
         <p className="opacity-50 leading-relaxed">
           On show: an example seal, an inscription of &ldquo;{SEAL_DEMO_TEXT}&rdquo;. Every seal of the same layout
           shares its first cells, the format&apos;s mark; the rest is the content.
         </p>
       )}
+      {!current && isGrain && (
+        <p className="opacity-50 leading-relaxed">
+          On show: an example, an inscription of &ldquo;{SEAL_DEMO_TEXT}&rdquo; hidden in the {cover === 'miniflower' ? 'smaller ' : ''}flower&apos;s
+          grain. Your seal gets a fresh speckle of its own.
+        </p>
+      )}
 
       {current && (
         <div className="flex flex-col gap-2 p-2 mt-1" style={BOX}>
-          <span>✓ sealed and read back: this drawing decodes to what you sealed{current.compressed ? ' (stored compressed)' : ''}.</span>
+          <span>
+            ✓ sealed and read back: this drawing decodes to what you sealed{current.compressed ? ' (stored compressed)' : ''}.
+            {current.grain && ` Hidden in the grain: ${current.grain.changed} speckles moved by one height (a ${current.grain.size}-byte frame).`}
+          </span>
           {current.kind === 'sealed' && <Secret label="Secret — the only thing that opens it. Anyone holding it can open the seal." value={current.reveal.secret} />}
           {current.kind === 'commitment' && <Secret label={`Salt — keep it with the exact ${current.source === 'file' ? 'file' : 'text'}. Until you publish both, nobody can tell what the seal holds.`} value={current.reveal.salt} />}
           {current.kind === 'hash' && <span className="opacity-70 break-all">SHA-256 {current.reveal.digest}. Nothing secret to keep: reveal the {current.source === 'file' ? 'file' : current.source === 'digest' ? 'content behind the digest' : 'text'} whenever you like.</span>}
@@ -232,8 +284,8 @@ export default function SealControls({ params, update, lastCommit }) {
   );
 }
 
-function counter(kind, src, { cap, stored, items, layout, tooLong }) {
-  const where = `the ${SEAL_LAYOUT_LABELS[layout]} layout`;
+function counter(kind, src, { cap, stored, items, layout, tooLong, cover }) {
+  const where = layout === 'flower' ? `the ${cover === 'miniflower' ? 'smaller ' : ''}flower's grain` : `the ${SEAL_LAYOUT_LABELS[layout]} layout`;
   if (kind === 'list') return `${items.length} item${items.length === 1 ? '' : 's'} (up to 256) — only their fingerprint is stored`;
   if (kind === 'commitment' || kind === 'hash') {
     if (src === 'digest') return 'the digest itself is stored';
@@ -241,7 +293,8 @@ function counter(kind, src, { cap, stored, items, layout, tooLong }) {
   }
   if (!stored) return '…';
   const note = stored.bytes < stored.raw ? ` (compressed from ${stored.raw})` : '';
-  return `${stored.bytes}${note} / ${cap} bytes in ${where}${tooLong ? ' — too long: pick a layout with less symmetry' : ''}`;
+  const advice = layout === 'flower' ? ' — too long for the grain: shorten it, or pick a digit layout' : ' — too long: pick a layout with less symmetry';
+  return `${stored.bytes}${note} / ${cap} bytes in ${where}${tooLong ? advice : ''}`;
 }
 
 function revealLinks(s, c) {
@@ -255,7 +308,8 @@ function revealLinks(s, c) {
 }
 
 function revealFile(s, c, links) {
-  const L = ['TERRAFORM SEAL — keep this file private until you reveal.', `mode: ${s.kind}`, `layout: ${s.layout}`];
+  const L = ['TERRAFORM SEAL — keep this file private until you reveal.', `mode: ${s.kind}`,
+    s.grain ? `layout: flower — in the grain of ${s.grain.cover === 'miniflower' ? 'the smaller flower' : "#6454's flower"} (${s.grain.size}-byte frame)` : `layout: ${s.layout}`];
   if (c) L.push(`parcel: #${c.tokenId}`, `transaction: ${c.txHash}`, `https://etherscan.io/tx/${c.txHash}`);
   else L.push('transaction: (not committed yet: save this file again after committing)');
   if (s.kind === 'sealed') L.push(`secret: ${s.reveal.secret}`);

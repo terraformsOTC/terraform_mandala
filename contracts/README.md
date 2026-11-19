@@ -113,3 +113,59 @@ You must see `ALL POST-DEPLOY CHECKS PASSED`. Save the log ([copy log]).
 
 **8. Afterwards.** The address goes into the site (/seal shows the contract's own answer) and
 CLAUDE.md. Anyone can re-check any deployment with the page's [check this address].
+
+# TerraformGrainReader: seals hidden in a drawing's grain
+
+`TerraformGrainReader.sol` (reader 2) reads seals that are hidden in a glyph's grain instead of
+written in the digits: the TFS1 frame (48, 64, 80, 96 or 112 bytes) is carried by which cells of
+the grain are odd and which are even, so the drawing stays as drawn and only grain cells move by
+one height. The format is `spec()` and the header of `src/lib/seal.js` (GRAIN SEALS); seals in
+the digits stay with TerraformSealReader above.
+
+| function | what it does |
+|---|---|
+| `decode(parcel)` / `decodeCanvas(canvas)` | the grain seal in the parcel's (or any) drawing: size, kind, payload, an inscription's text |
+| `textOf(parcel)` | a grain inscription's text |
+| `open(parcel, secret)` / `openCanvas(canvas, secret)` | a sealed message, opened with its secret (43 characters) |
+| `verifyHash` / `verifyHashBytes`, `verifyCommitment` / `verifyCommitmentBytes`, `verifyListItem` | the same reveal checks as reader 1 |
+| `spec`, `version`, `TERRAFORMS` | the format in full, the version, the Terraforms contract it reads |
+
+Kinds: inscription (never compressed), sealed (HKDF-SHA256 keys, a SHA-256 keystream and a
+key-committing HMAC-SHA256 tag; the secret is 32 random bytes shown as 43 base64url
+characters), salted commitment, plain hash, list. A parcel never committed gives found = false
+from `decode` and "not a … " reasons elsewhere. Same guarantees as reader 1: no owner, admin,
+proxy, storage or payable; only external call Terraforms' `tokenToCanvasData`; everything is a
+free read (the costliest about 2.5M gas).
+
+## Deployed
+
+Ethereum mainnet: **`0xe6A9893749600e26cfEEce10982Cd6ddC0fE93EF`**
+([Etherscan](https://etherscan.io/address/0xe6a9893749600e26cfeece10982cd6ddc0fe93ef)), created
+2026-11-19 in block 26,449,502 by terraformsotc.eth (transaction
+[`0xcfcb3fb7…4b1f`](https://etherscan.io/tx/0xcfcb3fb7b5971c691a006e95fea15e360c770444ed12873194bb0aaf569d4b1f)),
+through `deploy-grain.html`. The code there is the build below, byte for byte. The deploy page's
+post-deploy checks passed, and so did an independent re-check through a second Ethereum node
+(fresh inscription and sealed round trips, a wrong secret refused). Source verified on Etherscan and on
+[Sourcify](https://repo.sourcify.dev/1/0xe6A9893749600e26cfEEce10982Cd6ddC0fE93EF) (exact match).
+
+## The build
+
+| | |
+|---|---|
+| compiler | solc 0.8.26 (`0.8.26+commit.8a97fa7a`), optimizer on, runs 1, evmVersion cancun |
+| source sha256 | `7db098f812410a4e44cc482825a451b323327e30ed72250245a7f2a6889fd516` |
+| initcode keccak256 | `0x6405e43b43ad15c8f653b10ef0a85820f5b1ed491d930fe0d72e27ce33774dff` (16,654 bytes) |
+| runtime keccak256 | `0xc945d8af2f790ed5765223d226f272c6ba855a1eaf7724453f1df3df0d5d23ec` (16,626 bytes) |
+| deployment gas | 3,645,755 |
+
+`build/TerraformGrainReader.standard-json-input.json` is the exact compiler input (Etherscan:
+Standard-Json-Input, v0.8.26+commit.8a97fa7a, MIT), `build/TerraformGrainReader.metadata.json` the
+compiler metadata (Sourcify), `build/TerraformGrainReader.json` the ABI, bytecode, hashes and the
+post-deploy checks. It was deployed exactly like reader 1 (the steps above, with `deploy-grain.html`).
+
+Tests (2026-11-19, in the maintainer's ops folder, `mandala-seal/grain`; 770 checks, all passing):
+the cell order, the trellis and the frame map for every size against seal.js; HKDF, HMAC and
+opening against Node's crypto (flipped bits and near-miss secrets refused); every kind on every
+cover (the #6454 flower, the mini flower, Horus, Ra, the ankh, the moon god, the frog); crafted
+and random drawings, digit seals and real mainnet parcels read "no grain seal"; the deploy page
+rehearsed on a mainnet fork as the deploying account.

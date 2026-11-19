@@ -7,7 +7,7 @@ import {
 } from '@/lib/mandala';
 import { ESCHER_DESIGNS, ESCHER_CATEGORIES, escherDesignsIn, escherTones } from '@/lib/escher';
 import { EXPERIMENTAL_DESIGNS, EXPERIMENTAL_CATEGORIES, experimentalDesignsIn, normalizeExperimental } from '@/lib/experimental';
-import SealControls, { SEAL_MODE_LABELS, SEAL_LAYOUT_LABELS } from './SealControls';
+import SealControls, { SEAL_MODE_LABELS, sealLayoutLabel } from './SealControls';
 import { SEAL_MODES, SEAL_LAYOUTS, sealLayoutFor } from '@/lib/mandala';
 
 export default function MandalaControls({ params, onChange, lastCommit }) {
@@ -228,11 +228,12 @@ export default function MandalaControls({ params, onChange, lastCommit }) {
 //   temple   › cathedral / wat / ziggurat
 //   glyphs   › hieroglyphs › eye of horus / eye of ra / ankh / moon god / frog
 //            › nazca       › hummingbird / monkey / spider / condor
-//            › mathcastles › #1955 / #7341 (2026-11-18)
+//            › mathcastles › #1955 / #7341 (2026-11-18) / #6454 (2026-11-19)
 //   escher   › spirals / tessellations › design
 //   experimental › winners / runners-up › design (2026-11-17)
-//   seal     › commitment / sealed message / inscription / list › eight-fold / four-fold / pinwheel /
-//              mirror / half-turn / none (a sealed message needs four-fold or less)
+//   seal     › commitment / sealed message / inscription / list › flower (grain; a sealed message
+//              uses the smaller flower; 2026-11-19, the default) / eight-fold / four-fold / pinwheel /
+//              mirror / half-turn / none (in the digits, a sealed message needs four-fold or less)
 // Picking a higher level resets the levels under it to their first choice.
 function PatternMenu({ params, update, escher }) {
   const opts = (values, label = (v) => v) => values.map((v) => ({ value: String(v), label: label(v) }));
@@ -316,9 +317,9 @@ function PatternMenu({ params, update, escher }) {
       onChange: (sealMode) => update({ sealMode, sealLayout: sealLayoutFor(sealMode, params.sealLayout), sealHeightmap: null }),
     });
     levels.push({
-      label: 'symmetry',
+      label: 'layout',
       value: sealLayoutFor(params.sealMode, params.sealLayout),
-      options: opts(SEAL_LAYOUTS.filter((l) => sealLayoutFor(params.sealMode, l) === l), (l) => SEAL_LAYOUT_LABELS[l]),
+      options: opts(SEAL_LAYOUTS.filter((l) => sealLayoutFor(params.sealMode, l) === l), (l) => sealLayoutLabel(l, params.sealMode)),
       onChange: (sealLayout) => update({ sealLayout, sealHeightmap: null }),
     });
   }

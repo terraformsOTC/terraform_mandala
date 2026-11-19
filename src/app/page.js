@@ -324,6 +324,8 @@ function HomeInner() {
 function footerCredit(params) {
   if (params.algorithm === 'rings' && params.ringStyle === 'wheel') return <WheelCredit />;
   if (params.algorithm === 'seal') {
+    // The flower layout hides seals in #6454's flower (the smaller one for sealed messages): credit its dreamer.
+    if (sealLayoutFor(params.sealMode, params.sealLayout) === 'flower') return <FlowerCredit small={params.sealMode === 'sealed'} />;
     return <>A seal hides a message, a sealed message or a commitment in the drawing. Decode one, and read the format, at <a href="/seal">/seal</a>.</>;
   }
   // Experimental designs are our own drawings; the footer names what each is after.
@@ -350,6 +352,21 @@ function DreamCredit({ dream }) {
         {dream.dreamer.slice(0, 6)}…{dream.dreamer.slice(-4)} ↗
       </a>
       , cell for cell.
+    </>
+  );
+}
+
+function FlowerCredit({ small }) {
+  const dream = MATHCASTLES_DREAMS.p6454;
+  return (
+    <>
+      {small ? 'The smaller flower is drawn after the ' : 'The flower copies the '}
+      <a href={`https://terraformexplorer.xyz/dreams/${dream.tx}`} target="_blank" rel="noopener noreferrer">heightmap dreamt on parcel #{dream.token} ↗</a>{' '}
+      by{' '}
+      <a href={`https://terraformexplorer.xyz/dreamers/${dream.dreamer}`} target="_blank" rel="noopener noreferrer">
+        {dream.dreamer.slice(0, 6)}…{dream.dreamer.slice(-4)} ↗
+      </a>
+      {small ? '' : ', cell for cell'}; the seal hides in its grain. Decode one, and read the format, at <a href="/seal">/seal</a>.
     </>
   );
 }

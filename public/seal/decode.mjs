@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Reference decoder for Terraform seals (TFS1), from terraformmandala.xyz/seal.
+// Reference decoder for Terraform seals (TFS1), from terraformmandala.xyz/seal: seals written in
+// a drawing's digits and seals hidden in its grain.
 // Needs Node 18+ and seal.mjs beside it (the format is documented at its top). It reads
 // the chain through any Ethereum JSON-RPC node; nothing else is contacted.
 //
@@ -10,7 +11,7 @@
 //     --item <tfs1:…>                  check one revealed item of a list commitment
 //     --rpc <url>                      JSON-RPC endpoint (default https://ethereum-rpc.publicnode.com)
 import { readFileSync } from 'node:fs';
-import { decodeSeal, openSeal, verifyCommitment, verifyHash, verifyListItem, heightmapFromCanvas, parseCommitCalldata } from './seal.mjs';
+import { findSeal, openSeal, verifyCommitment, verifyHash, verifyListItem, heightmapFromCanvas, parseCommitCalldata } from './seal.mjs';
 
 const TERRAFORMS = '0x4e1f41613c9084fdb9e34e11fae9412427480e56';
 const CANVAS_DATA = '0xb9173bb6'; // tokenToCanvasData(uint256,uint256)
@@ -59,9 +60,10 @@ if (/^\d{1,4}$/.test(input)) {
   heightmap = input.replace(/\s+/g, '');
 }
 
-const seal = await decodeSeal(heightmap);
+const seal = await findSeal(heightmap);
 if (!seal) { console.log('no seal in this drawing'); process.exit(1); }
-console.log(`seal: ${seal.mode}, ${seal.layout} layout${seal.compressed ? ', compressed' : ''}${seal.fillerIntact ? '' : ' (payload intact, other cells changed)'}`);
+const where = seal.carrier === 'grain' ? `hidden in the grain (${seal.size}-byte frame)` : `${seal.layout} layout`;
+console.log(`seal: ${seal.mode}, ${where}${seal.compressed ? ', compressed' : ''}${seal.fillerIntact ? '' : ' (payload intact, other cells changed)'}`);
 const content = opt('file') ? { bytes: new Uint8Array(readFileSync(opt('file'))) } : opt('text') !== undefined ? { text: opt('text') } : null;
 const done = (ok, yes, no) => { console.log(ok ? yes : no); process.exit(ok ? 0 : 1); };
 if (seal.mode === 'inscription') console.log(`text:\n${seal.text}`);

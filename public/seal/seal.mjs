@@ -59,6 +59,38 @@
 //                    SHA-256(0x00 | "terraform-seal/list/v1" | salt_i (16) | text_i); a node =
 //                    SHA-256(0x01 | left | right). Each item is revealed on its own, with its
 //                    salt and audit path, and the others stay hidden.
+//
+// GRAIN SEALS (version 1, 2026-11-19)
+//   The same frame (magic to filler), cut to S bytes, S = 48, 64, 80, 96 or 112 (the smallest that
+//   holds it, or a larger one an encoder picks to hide a sealed message's length; the site seals
+//   every sealed message at 96), hidden in a drawing's parities instead of written in its digits: the drawing stays as
+//   drawn, and only cells of a glyph's grain (the random speckle of its ground) move, by one height.
+//   Modes 1 inscription (never compressed), 2 sealed (below), 3 commitment, 4 hash and 5 list, as
+//   above; the mode byte has no flags.
+//   2 sealed in a grain (more compact than the digits' AES-GCM, so that it fits a grain):
+//            S = 32 random bytes, the secret. HKDF-SHA256(S, no salt, info "terraform-seal/grain-
+//            sealed/v1") -> 64 bytes: Ke | Km. The payload fills the frame: ciphertext (n = S - 43
+//            bytes) | tag (32). plaintext = the text (UTF-8, NFC, \n line ends, no zero byte) then
+//            zero bytes to n; ciphertext = plaintext XOR (SHA-256(Ke | uint32 0) | SHA-256(Ke |
+//            uint32 1) | ...); tag = HMAC-SHA256(Km, bytes 0..6 | ciphertext). Opening checks the tag,
+//            decrypts and drops the trailing zeros. The tag binds the text to the one secret: no
+//            other secret opens it (a 256-bit collision), so its author cannot choose between two
+//            messages later; the text's length is hidden within the frame size.
+//   Bits     cell c (row by row) gives one bit, its digit's parity (odd = 1). Bit j is cell P[j]'s:
+//            P orders 0..1023 by the 64-bit big-endian numbers in bytes 8c..8c+7 of R("perm")
+//            (ties by c). R(label) = SHA-256(T | "|" | label | uint32 0) | SHA-256(T | "|" | label |
+//            uint32 1) | ..., T = "terraform-seal/grain/v1".
+//   Frame    the 8S bits of the frame (most significant bit of each byte first) are H x bits
+//            mod 2, H a syndrome-trellis code (Filler, Judas & Fridrich 2011) of constraint height
+//            11 with k = 10 + 8S rows, the first 10 carrying nothing (so every frame bit depends on
+//            eleven blocks of cells). With w_i = floor((i+1) 1024 / k) - floor(i 1024 / k), state = 0:
+//              for i = 0 .. k-1:  for t = 0 .. w_i - 1: if the next bit is 1, state ^= C_w[t] & m_i
+//                                 if i >= 10: frame bit i - 10 = state & 1;   state >>= 1
+//            m_i = 2^min(11, k - i) - 1; C_w[t] = (bytes 4t..4t+3 of R("hhat" w), big-endian, & 2047)
+//            | 1 | 1024, for w = 1, 2, 3 (the widths these k give).
+//   A decoder tries S = 48, 64, 80, 96, 112 in turn and takes the first frame whose magic,
+//   version, mode, length (a sealed payload: at least 33 bytes) and check hold. An encoder picks the fewest grain cells to change with the Viterbi
+//   algorithm on the code's trellis; every other cell keeps its digit.
 
 const MAGIC = [0x54, 0x46, 0x53];
 const VERSION = 1;
@@ -382,8 +414,9 @@ export async function decodeSeal(heightmap) {
   return null;
 }
 
-/** Open a sealed message with its secret (base64url). Throws if it is not this seal's. */
+/** Open a sealed message with its secret (base64url), in the digits or in a grain (openGrainSeal). Throws if it is not this seal's. */
 export async function openSeal(decoded, secretText) {
+  if (decoded?.carrier === 'grain') return openGrainSeal(decoded, secretText);
   if (decoded?.mode !== 'sealed') throw new Error('not a sealed message');
   let s;
   try { s = fromBase64url(secretText); } catch { throw new Error('a secret is 43 characters of base64url'); }
@@ -448,4 +481,296 @@ export function parseCommitCalldata(hex) {
   const words = [];
   for (let i = 0; i < 17; i++) words.push(BigInt('0x' + s.slice(8 + i * 64, 8 + (i + 1) * 64)));
   return { tokenId: Number(words[0]), canvas: words.slice(1) };
+}
+
+// --- grain seals (see GRAIN SEALS above) -------------------------------------------
+export const GRAIN_SIZES = [48, 64, 80, 96, 112];
+export const GRAIN_MODES = ['inscription', 'sealed', 'commitment', 'hash', 'list'];
+const INFO_GRAIN_SEALED = enc.encode('terraform-seal/grain-sealed/v1');
+const GRAIN_TAG_BYTES = 32;
+const GRAIN_TAG = 'terraform-seal/grain/v1';
+const GRAIN_H = 11;
+const CELLS = 1024;
+
+async function grainR(label, n) {
+  const out = new Uint8Array(Math.ceil(n / 32) * 32);
+  for (let i = 0; 32 * i < n; i++) out.set(await sha256(enc.encode(`${GRAIN_TAG}|${label}`), u32(i)), 32 * i);
+  return out.subarray(0, n);
+}
+
+let grainTables = null;
+/** The code's public tables: perm (bit j is cell perm[j]'s parity) and the columns C_w. */
+export function grainCode() {
+  if (!grainTables) {
+    grainTables = (async () => {
+      const r = await grainR('perm', 8 * CELLS);
+      const keys = Array.from({ length: CELLS }, (_, c) => {
+        let k = 0n;
+        for (let b = 0; b < 8; b++) k = (k << 8n) | BigInt(r[8 * c + b]);
+        return [k, c];
+      });
+      keys.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]));
+      const cols = {};
+      for (const w of [1, 2, 3]) {
+        const h = await grainR(`hhat${w}`, 4 * w);
+        cols[w] = Array.from({ length: w }, (_, t) => ((h[4 * t + 2] << 8 | h[4 * t + 3]) & 2047) | 1 | 1024);
+      }
+      return { perm: keys.map((k) => k[1]), cols };
+    })();
+  }
+  return grainTables;
+}
+
+/** Most text bytes a grain frame of this size holds: an inscription's, or a sealed message's. */
+export function grainTextCapacity(mode, size) {
+  if (!GRAIN_SIZES.includes(size)) throw new Error(`a grain frame is ${GRAIN_SIZES.join(', ')} bytes`);
+  if (mode === 'inscription') return size - HEADER - CHECK;
+  if (mode === 'sealed') return size - HEADER - CHECK - GRAIN_TAG_BYTES;
+  throw new Error('only inscriptions and sealed messages carry a text');
+}
+
+const grainWidth = (i, k) => Math.floor(((i + 1) * CELLS) / k) - Math.floor((i * CELLS) / k);
+
+// The trellis has HEAD + 8S rows; the first HEAD carry nothing (an encoder may leave them as
+// they fall), so every frame bit sees GRAIN_H blocks of cells.
+const GRAIN_HEAD = GRAIN_H - 1;
+function grainSyndrome(bits, size, cols) {
+  const k = GRAIN_HEAD + 8 * size, out = new Uint8Array(size);
+  let state = 0, j = 0;
+  for (let i = 0; i < k; i++) {
+    const w = grainWidth(i, k), mask = (1 << Math.min(GRAIN_H, k - i)) - 1;
+    for (let t = 0; t < w; t++, j++) if (bits[j]) state ^= cols[w][t] & mask;
+    const f = i - GRAIN_HEAD;
+    if (f >= 0 && state & 1) out[f >> 3] |= 0x80 >> (f & 7);
+    state >>= 1;
+  }
+  return out;
+}
+
+async function grainFrame(modeByte, payload, size) {
+  const body = concat(new Uint8Array([...MAGIC, VERSION, modeByte, (payload.length >> 8) & 255, payload.length & 255]), payload);
+  const check = (await sha256(body)).subarray(0, CHECK);
+  const f = new Uint8Array(size);
+  f.set(concat(body, check));
+  for (let i = 0, o = body.length + CHECK; o < size; i++, o += 32) f.set((await sha256(check, enc.encode('fill'), u32(i))).subarray(0, Math.min(32, size - o)), o);
+  return f;
+}
+
+async function parseGrainFrame(f) {
+  if (!MAGIC.every((v, i) => f[i] === v) || f[3] !== VERSION) return null;
+  const mode = MODE_NAMES[f[4]];
+  if (!mode) return null;
+  const len = (f[5] << 8) | f[6];
+  if (HEADER + len + CHECK > f.length) return null;
+  const check = (await sha256(f.subarray(0, HEADER + len))).subarray(0, CHECK);
+  if (!equal(check, f.subarray(HEADER + len, HEADER + len + CHECK))) return null;
+  const payload = f.slice(HEADER, HEADER + len);
+  if (FIXED[mode] && payload.length !== FIXED[mode]) return null;
+  if (mode === 'sealed' && payload.length < GRAIN_TAG_BYTES + 1) return null;
+  let fillerIntact = true;
+  for (let i = 0, o = HEADER + len + CHECK; o < f.length; i++, o += 32) {
+    const block = await sha256(check, enc.encode('fill'), u32(i));
+    if (!equal(block.subarray(0, Math.min(32, f.length - o)), f.subarray(o, Math.min(o + 32, f.length)))) { fillerIntact = false; break; }
+  }
+  const out = { mode, compressed: false, payload, fillerIntact };
+  if (mode === 'inscription') out.text = new TextDecoder('utf-8', { fatal: false }).decode(payload);
+  if (mode === 'commitment' || mode === 'hash') out.digest = toHex(payload);
+  if (mode === 'list') {
+    out.root = toHex(payload.subarray(0, 32));
+    out.count = (payload[32] << 8) | payload[33];
+    if (out.count < 1 || out.count > MAX_LIST_ITEMS) return null;
+  }
+  return out;
+}
+
+/**
+ * Find a seal hidden in a heightmap's grain. Returns null, or { carrier: 'grain', size, mode,
+ * compressed: false, payload, fillerIntact } plus text / digest / root and count, as decodeSeal.
+ */
+export async function decodeGrain(heightmap) {
+  const hm = String(heightmap).replace(/\s+/g, '');
+  if (!/^[0-9]{1024}$/.test(hm)) return null;
+  const { perm, cols } = await grainCode();
+  const bits = perm.map((c) => hm.charCodeAt(c) & 1);
+  for (const size of GRAIN_SIZES) {
+    const out = await parseGrainFrame(grainSyndrome(bits, size, cols));
+    if (out) return { carrier: 'grain', size, ...out };
+  }
+  return null;
+}
+
+// --- sealed in a grain: HKDF keys, a SHA-256 keystream, an HMAC-SHA256 tag
+async function grainSealedKeys(secret) {
+  const base = await globalThis.crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveBits']);
+  const bits = new Uint8Array(await globalThis.crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: INFO_GRAIN_SEALED }, base, 64 * 8));
+  return { ke: bits.slice(0, 32), km: bits.slice(32, 64) };
+}
+async function grainKeystream(ke, n) {
+  const out = new Uint8Array(Math.ceil(n / 32) * 32);
+  for (let i = 0; 32 * i < n; i++) out.set(await sha256(ke, u32(i)), 32 * i);
+  return out.subarray(0, n);
+}
+async function hmacSha256(key, data) {
+  const k = await globalThis.crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await globalThis.crypto.subtle.sign('HMAC', k, data));
+}
+const grainSealedHeader = (n) => new Uint8Array([...MAGIC, VERSION, SEAL_MODES.sealed, (n >> 8) & 255, n & 255]);
+async function grainSealPayload(secret, data, size) {
+  const n = size - HEADER - CHECK - GRAIN_TAG_BYTES;
+  const plain = new Uint8Array(n);
+  plain.set(data);
+  const { ke, km } = await grainSealedKeys(secret);
+  const ks = await grainKeystream(ke, n);
+  const ct = plain.map((v, i) => v ^ ks[i]);
+  const tag = await hmacSha256(km, concat(grainSealedHeader(n + GRAIN_TAG_BYTES), ct));
+  return concat(ct, tag);
+}
+
+/** Open a grain-sealed message with its secret (43 characters of base64url). Throws if it is not this seal's. */
+export async function openGrainSeal(decoded, secretText) {
+  if (decoded?.carrier !== 'grain' || decoded.mode !== 'sealed') throw new Error('not a sealed message in a grain');
+  let s;
+  try { s = fromBase64url(secretText); } catch { throw new Error('a secret is 43 characters of base64url'); }
+  if (s.length !== 32) throw new Error('a secret is 32 bytes (43 characters)');
+  const p = decoded.payload, n = p.length - GRAIN_TAG_BYTES;
+  const { ke, km } = await grainSealedKeys(s);
+  if (!equal(await hmacSha256(km, concat(grainSealedHeader(p.length), p.subarray(0, n))), p.subarray(n))) throw new Error('this secret does not open this seal');
+  const ks = await grainKeystream(ke, n);
+  const plain = p.subarray(0, n).map((v, i) => v ^ ks[i]);
+  let end = n;
+  while (end > 0 && plain[end - 1] === 0) end--;
+  return new TextDecoder().decode(plain.subarray(0, end));
+}
+
+/** A seal of either kind: in the digits (decodeSeal) or else in the grain (decodeGrain). */
+export async function findSeal(heightmap) {
+  return (await decodeSeal(heightmap)) ?? (await decodeGrain(heightmap));
+}
+
+// Viterbi on the trellis: the cheapest y (cost rho per changed bit, Infinity = fixed) with H y = m
+// (m[i] null: row i is free).
+function grainEmbed(x, rho, m, cols) {
+  const k = m.length, S = 1 << GRAIN_H;
+  const choice = [];
+  let wght = new Float64Array(S).fill(Infinity);
+  wght[0] = 0;
+  const steps = [];
+  let j = 0;
+  for (let i = 0; i < k; i++) {
+    const w = grainWidth(i, k), mask = (1 << Math.min(GRAIN_H, k - i)) - 1;
+    for (let t = 0; t < w; t++, j++) {
+      const c = cols[w][t] & mask, r = rho[j];
+      const a0 = x[j] === 1 ? r : 0, a1 = x[j] === 0 ? r : 0;
+      const next = new Float64Array(S), take = new Uint8Array(S);
+      for (let s = 0; s < S; s++) {
+        const stay = wght[s] + a0, flip = wght[s ^ c] + a1;
+        if (flip < stay) { next[s] = flip; take[s] = 1; } else next[s] = stay;
+      }
+      steps.push([c, take]);
+      wght = next;
+    }
+    const shifted = new Float64Array(S).fill(Infinity);
+    if (m[i] === null) {
+      const pick = new Uint8Array(S / 2);
+      for (let t = 0; t < S / 2; t++) { pick[t] = wght[2 * t + 1] < wght[2 * t] ? 1 : 0; shifted[t] = wght[2 * t + pick[t]]; }
+      choice[i] = pick;
+    } else for (let t = 0; t < S / 2; t++) shifted[t] = wght[2 * t + m[i]];
+    wght = shifted;
+  }
+  if (!Number.isFinite(wght[0])) return null;
+  const y = new Uint8Array(CELLS);
+  let s = 0;
+  j = CELLS;
+  for (let i = k - 1; i >= 0; i--) {
+    s = (s << 1) | (m[i] === null ? choice[i][s] : m[i]);
+    for (let t = 0; t < grainWidth(i, k); t++) {
+      j--;
+      const [c, take] = steps[j];
+      y[j] = take[s];             // the bit chosen for cell j (1: its column joined the sum)
+      if (take[s]) s ^= c;
+    }
+  }
+  return s === 0 ? y : null;
+}
+
+/**
+ * Hide a seal in a drawing's grain. heightmap: the 1024 digits as drawn, grain included;
+ * alt[c]: the digit cell c may become (of the other parity), or null where it must not change.
+ * Content as for encodeSeal (texts are never compressed; a sealed message is the grain's own
+ * kind, see GRAIN SEALS). size: the smallest frame to use (default: the smallest that holds it;
+ * a larger one hides a sealed message's length). Returns { heightmap, mode, size, changed,
+ * reveal }; throws if the grain is too small for it.
+ */
+export async function encodeGrain({ heightmap, alt, mode, text, bytes, digest, items, salt, salts, secret, size: minSize }) {
+  const hm = String(heightmap).replace(/\s+/g, '');
+  if (!/^[0-9]{1024}$/.test(hm)) throw new Error('a heightmap is 1024 digits');
+  if (!GRAIN_MODES.includes(mode)) throw new Error(`a grain seal is an ${GRAIN_MODES.join(', ')}`);
+  if (!Array.isArray(alt) || alt.length !== CELLS) throw new Error('alt: one entry per cell');
+  if (minSize != null && !GRAIN_SIZES.includes(minSize)) throw new Error(`a grain frame is ${GRAIN_SIZES.join(', ')} bytes`);
+  const least = minSize ?? 0;
+  for (let c = 0; c < CELLS; c++) {
+    if (alt[c] == null) continue;
+    if (!Number.isInteger(alt[c]) || alt[c] < 0 || alt[c] > 8 || ((alt[c] ^ Number(hm[c])) & 1) === 0 || hm[c] === '9') throw new Error(`alt[${c}] must be a digit 0-8 of the other parity, on a cell that is not empty`);
+  }
+  let payload, size, reveal;
+  if (mode === 'sealed') {
+    const data = textBytes(text);
+    if (data.includes(0)) throw new Error('a sealed text cannot contain a zero character');
+    size = GRAIN_SIZES.find((s) => s >= least && HEADER + CHECK + GRAIN_TAG_BYTES + data.length <= s);
+    if (!size) throw new Error(`too long: ${data.length} bytes; a grain frame holds at most ${GRAIN_SIZES.at(-1) - HEADER - CHECK - GRAIN_TAG_BYTES} sealed`);
+    const s = secret ? new Uint8Array(secret) : random(32);
+    if (s.length !== 32) throw new Error('a secret is 32 bytes');
+    payload = await grainSealPayload(s, data, size);
+    reveal = { secret: toBase64url(s) };
+  } else {
+    // The payload and reveal exactly as a digit seal makes them (plain layout, uncompressed).
+    const sealed = await encodeSeal({ mode, layout: 'plain', text, bytes, digest, items, salt, salts, compress: false });
+    payload = (await decodeSeal(sealed.heightmap)).payload;
+    size = GRAIN_SIZES.find((s) => s >= least && HEADER + payload.length + CHECK <= s);
+    if (!size) throw new Error(`too long: ${payload.length} bytes; a grain holds at most ${GRAIN_SIZES.at(-1) - HEADER - CHECK}`);
+    reveal = sealed.reveal;
+  }
+  const { perm, cols } = await grainCode();
+  const x = perm.map((c) => hm.charCodeAt(c) & 1);
+  const rho = perm.map((c) => (alt[c] == null ? Infinity : 1));
+  const bitsOf = (f) => [...new Array(GRAIN_HEAD).fill(null), ...Array.from({ length: 8 * size }, (_, i) => (f[i >> 3] >> (7 - (i & 7))) & 1)];
+  let y = grainEmbed(x, rho, bitsOf(await grainFrame(SEAL_MODES[mode], payload, size)), cols);
+  // A sealed message is random-looking: when the trellis cannot reach it, a fresh secret gives another.
+  for (let attempt = 1; !y && mode === 'sealed' && !secret && attempt < 12; attempt++) {
+    const s2 = random(32);
+    payload = await grainSealPayload(s2, textBytes(text), size);
+    reveal = { secret: toBase64url(s2) };
+    y = grainEmbed(x, rho, bitsOf(await grainFrame(SEAL_MODES[mode], payload, size)), cols);
+  }
+  if (!y) throw new Error(`this drawing's grain is too small for a ${size}-byte seal`);
+  const out = hm.split('');
+  let changed = 0;
+  perm.forEach((c, j) => { if (y[j] !== x[j]) { out[c] = String(alt[c]); changed++; } });
+  const result = out.join('');
+  const back = await decodeGrain(result);
+  if (!back || back.mode !== mode || back.size !== size || !equal(back.payload, payload)) throw new Error('the grain seal did not read back');
+  return { heightmap: result, mode, size, changed, reveal };
+}
+
+/** Low level, for tests and tools: the raw S-byte frame a heightmap's parities give. */
+export async function grainFrameOf(heightmap, size) {
+  const hm = String(heightmap).replace(/\s+/g, '');
+  if (!/^[0-9]{1024}$/.test(hm) || !GRAIN_SIZES.includes(size)) throw new Error(`a heightmap and a size of ${GRAIN_SIZES.join(', ')}`);
+  const { perm, cols } = await grainCode();
+  return grainSyndrome(perm.map((c) => hm.charCodeAt(c) & 1), size, cols);
+}
+
+/** Low level, for tests and tools: hide any S-byte frame (unchecked) in a heightmap's grain. */
+export async function embedGrainFrame({ heightmap, alt, frame }) {
+  const hm = String(heightmap).replace(/\s+/g, '');
+  const f = new Uint8Array(frame);
+  if (!/^[0-9]{1024}$/.test(hm) || !GRAIN_SIZES.includes(f.length)) throw new Error(`a heightmap and a frame of ${GRAIN_SIZES.join(', ')} bytes`);
+  const { perm, cols } = await grainCode();
+  const m = [...new Array(GRAIN_HEAD).fill(null), ...Array.from({ length: 8 * f.length }, (_, i) => (f[i >> 3] >> (7 - (i & 7))) & 1)];
+  const x = perm.map((c) => hm.charCodeAt(c) & 1);
+  const y = grainEmbed(x, perm.map((c) => (alt[c] == null ? Infinity : 1)), m, cols);
+  if (!y) throw new Error('the grain is too small for this frame');
+  const out = hm.split('');
+  perm.forEach((c, j) => { if (y[j] !== x[j]) out[c] = String(alt[c]); });
+  return out.join('');
 }

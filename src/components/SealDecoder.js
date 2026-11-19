@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'react';
 // the heightmap in to get the original message or secret"). Needs no wallet. Secrets, texts,
 // salts and files given here stay in this tab: decoding and checking run in the browser, and
 // a reveal link carries its secret in the URL fragment (#…), which browsers never send.
+// Reads seals of both carriers (findSeal): written in the digits, or hidden in a drawing's grain
+// (2026-11-19).
 const loadSeal = () => import('@/lib/seal');
 const LAYOUT = { eighth: 'eight-fold', quarter: 'four-fold', pinwheel: 'pinwheel', mirror: 'mirror', rotation: 'half-turn', plain: 'none' };
 const KIND = { inscription: 'an inscription', sealed: 'a sealed message', commitment: 'a salted commitment', hash: 'a plain SHA-256 hash', list: 'a list commitment' };
@@ -58,7 +60,7 @@ export default function SealDecoder() {
     try {
       const S = await loadSeal();
       const { heightmap, source } = await readInput(value, S);
-      const seal = await S.decodeSeal(heightmap);
+      const seal = await S.findSeal(heightmap);
       setFound({ seal, source });
       return seal;
     } catch (e) {
@@ -128,7 +130,8 @@ export default function SealDecoder() {
       <h1 className="text-lg opacity-90">[seal decoder]</h1>
       <p className="opacity-75 leading-relaxed">
         A <strong>seal</strong> is a message written into a Terraforms heightmap — the 1,024 digits a parcel stores when
-        its owner commits a drawing. It looks like noise, or a kaleidoscope of it. It can be a <strong>commitment</strong>{' '}
+        its owner commits a drawing. It looks like noise or a kaleidoscope of it, or it hides in the grain of a drawing
+        that stays as drawn. It can be a <strong>commitment</strong>{' '}
         (a fingerprint of a secret, salted, or a plain SHA-256), a <strong>list commitment</strong> (many secrets, revealed one
         at a time), a <strong>sealed message</strong> (encrypted, opened later by a published secret) or an{' '}
         <strong>inscription</strong> anyone can read. The commit transaction dates it.
@@ -149,7 +152,8 @@ export default function SealDecoder() {
       {seal && (
         <div className="flex flex-col gap-2 p-3" style={BOX}>
           <span>
-            This drawing is <strong>{KIND[seal.mode]}</strong>, {LAYOUT[seal.layout]} layout{seal.compressed ? ', stored compressed' : ''}.
+            This drawing is <strong>{KIND[seal.mode]}</strong>
+            {seal.carrier === 'grain' ? `, hidden in its grain (a ${seal.size}-byte frame)` : `, ${LAYOUT[seal.layout]} layout`}{seal.compressed ? ', stored compressed' : ''}.
             {!seal.fillerIntact && <span style={{ color: '#fbbf24' }}> (Its payload checks out, but cells outside it were changed.)</span>}
           </span>
           {src?.kind === 'tx' && (
@@ -230,6 +234,15 @@ export default function SealDecoder() {
           decimal digits are 3,401 bits); eight-fold holds 56, enough for any commitment. Any changed digit breaks the
           symmetry or the check.
         </p>
+        <p>
+          A seal can also hide in a drawing&apos;s <strong>grain</strong>, the random speckle of a glyph&apos;s ground,
+          and leave the drawing itself as drawn. Each cell gives one bit, odd or even, and the same frame (48 to 112
+          bytes) is read from those bits through a public syndrome-trellis code; to seal, the fewest speckles move by
+          one height. The designer&apos;s flower layout hides seals in the grain of parcel #6454&apos;s flower, and a sealed
+          message in a smaller flower, whose wider field holds it. There the sealed message is the grain&apos;s own,
+          more compact kind: a SHA-256 keystream and an HMAC-SHA256 tag under keys derived from the 32-byte secret,
+          padded to the frame so its length is hidden, and bound to that one secret.
+        </p>
         <h2 className="text-base mt-2">Decode it yourself</h2>
         <p>
           The full format is at the top of <a href="/seal/seal.mjs">seal.mjs</a>, the one file this page and the designer
@@ -243,10 +256,14 @@ node decode.mjs 0x<commit transaction> --file ./document.pdf
 node decode.mjs 0x<commit transaction> --item tfs1:…`}</pre>
         <h2 className="text-base mt-2">On-chain</h2>
         <p>
-          The same decoder also lives on Ethereum, as a contract with no owner that nobody can change:{' '}
-          <strong>TerraformSealReader</strong>, <code className="break-all">0xF0ecd91e78E0042C1b81945BC8FFB3E7D0E3B623</code>{' '}
+          The same decoder also lives on Ethereum, as two contracts with no owner that nobody can change, one per
+          carrier. Seals in the digits: <strong>TerraformSealReader</strong>,{' '}
+          <code className="break-all">0xF0ecd91e78E0042C1b81945BC8FFB3E7D0E3B623</code>{' '}
           <a href="https://etherscan.io/address/0xf0ecd91e78e0042c1b81945bc8ffb3e7d0e3b623#readContract" target="_blank" rel="noopener noreferrer">[etherscan ↗]</a>.
-          It reads a parcel&apos;s drawing straight from the Terraforms contract. <code>decode</code>, <code>textOf</code>,{' '}
+          Seals in the grain: <strong>TerraformGrainReader</strong>,{' '}
+          <code className="break-all">0xe6A9893749600e26cfEEce10982Cd6ddC0fE93EF</code>{' '}
+          <a href="https://etherscan.io/address/0xe6a9893749600e26cfeece10982cd6ddc0fe93ef#readContract" target="_blank" rel="noopener noreferrer">[etherscan ↗]</a>.
+          Each reads a parcel&apos;s drawing straight from the Terraforms contract. <code>decode</code>, <code>textOf</code>,{' '}
           <code>open</code> and the <code>verify</code> functions are free to call from Etherscan&apos;s Read Contract tab
           or any Ethereum node, with no website.
         </p>

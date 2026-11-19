@@ -28,7 +28,7 @@ import { validate } from './heightmap.js';
 //               set freely, its lines never move (see generateGlyph).
 //   glyphs/nazca — our own drawings of four Nazca geoglyphs, in the same three
 //               heights (see NAZCA_DREAMS).
-//   glyphs/mathcastles — two heightmaps dreamt on parcels #1955 and #7341, copied
+//   glyphs/mathcastles — heightmaps dreamt on parcels #1955, #7341 and #6454, copied
 //               cell for cell and drawn as dreamt (see MATHCASTLES_DREAMS).
 //
 // terraceCount drives complexity for the three temple variants. seed is the
@@ -63,7 +63,7 @@ export const DEFAULTS = {
   expGround: 0,      // 1: empty cells (9) become ground (0)
   sealMode: 'commitment', // seal.js (James, 2026-11-17): commitment | sealed | inscription | list
   sealSalt: 1,            // commitment only: 1 salted, 0 a plain SHA-256 (James: "add it as a toggle")
-  sealLayout: 'eighth',   // eighth | quarter | pinwheel | mirror | rotation | plain
+  sealLayout: 'flower',   // flower (in its grain; James 2026-11-19, the default) | eighth | quarter | pinwheel | mirror | rotation | plain
   sealHeightmap: null,    // the user's sealed drawing (never in the URL); null = the example
   grain: 0,          // 0 off, 1 on
   spokeCount: 3,
@@ -76,19 +76,21 @@ export const RING_STYLES = ['concentric', 'wheel'];
 // Glyph sets and the glyphs in each (James, 2026-11-12: the menu reads
 // glyphs > hieroglyphs > eye of horus / eye of ra / ankh / moon god / frog, glyphs > nazca > condor...).
 // 'horus' was the hieroglyph set's name until then; old links still open it.
-// mathcastles (James, 2026-11-18): two dreams copied as dreamt, so their heights are fixed
+// mathcastles (James, 2026-11-18; #6454's flower 2026-11-19): dreams copied as dreamt, so their heights are fixed
 // (no line / edge / ground sliders, no grain); see MATHCASTLES_DREAMS.
 export const GLYPH_SETS = ['hieroglyphs', 'nazca', 'mathcastles'];
 export const HIEROGLYPHS = ['horus', 'ra', 'ankh', 'moon', 'frog'];
 export const NAZCA_FIGURES = ['hummingbird', 'monkey', 'spider', 'condor'];
-export const MATHCASTLES_FIGURES = ['p1955', 'p7341'];
+export const MATHCASTLES_FIGURES = ['p1955', 'p7341', 'p6454'];
 export const GLYPH_FIGURES = { hieroglyphs: HIEROGLYPHS, nazca: NAZCA_FIGURES, mathcastles: MATHCASTLES_FIGURES };
-export const FIGURE_LABELS = { horus: 'eye of horus', ra: 'eye of ra', ankh: 'ankh', moon: 'moon god', frog: 'frog', p1955: '#1955', p7341: '#7341' };
+export const FIGURE_LABELS = { horus: 'eye of horus', ra: 'eye of ra', ankh: 'ankh', moon: 'moon god', frog: 'frog', p1955: '#1955', p7341: '#7341', p6454: '#6454' };
 // A set drawn exactly as dreamt: its heights can't be set and grain doesn't apply.
 export const isDreamtGlyphSet = (set) => normalizeGlyphSet(set) === 'mathcastles';
 export const PATTERNS = ['classic', 'rings', 'temple', 'glyphs', 'escher', 'experimental', 'seal'];
 export const SEAL_MODES = ['commitment', 'sealed', 'inscription', 'list'];
-export const SEAL_LAYOUTS = ['eighth', 'quarter', 'pinwheel', 'mirror', 'rotation', 'plain'];
+// flower: hidden in the grain of #6454's flower (sealCovers.js; a sealed message uses the smaller
+// flower); the others write the seal into the digits.
+export const SEAL_LAYOUTS = ['flower', 'eighth', 'quarter', 'pinwheel', 'mirror', 'rotation', 'plain'];
 // A sealed message needs more room than the eight-fold layout has (seal.js).
 export const sealLayoutFor = (mode, layout) => (mode === 'sealed' && layout === 'eighth' ? 'quarter' : layout);
 
@@ -148,7 +150,8 @@ export function generateMandala(opts = {}) {
     // A seal is made asynchronously (WebCrypto) by SealControls and handed in whole;
     // until then the layout's example. Its symmetry and integrity are seal.js's to check.
     const layout = sealLayoutFor(opts.sealMode, SEAL_LAYOUTS.includes(opts.sealLayout) ? opts.sealLayout : DEFAULTS.sealLayout);
-    const hm = /^[0-9]{1024}$/.test(opts.sealHeightmap ?? '') ? opts.sealHeightmap : SEAL_DEMOS[layout];
+    const demo = layout === 'flower' ? (opts.sealMode === 'sealed' ? 'miniflower' : 'flower') : layout;
+    const hm = /^[0-9]{1024}$/.test(opts.sealHeightmap ?? '') ? opts.sealHeightmap : SEAL_DEMOS[demo];
     grid = Array.from({ length: SIDE }, (_, r) => hm.slice(r * SIDE, (r + 1) * SIDE).split(''));
   } else if (isExperimental) {
     grid = generateExperimental(opts.experimentalDesign, {
@@ -1438,6 +1441,45 @@ export const MATHCASTLES_DREAMS = {
       '09999999999999988999999999999990',
       '09999999999999687999999999999990',
       '00090909909999979999990990909000',
+    ],
+  },
+  p6454: {
+    token: 6454,
+    dreamer: '0xcfb098c1d44eb12f93f9aaece5d6054e2a2240ab',
+    tx: '0x1b5294b76fd5a69f0b2bcc915f2de3ed2ae87631b6e329249af6ad9859473927', // 2024-01-03
+    rows: [
+      '88888888888888888888888888888888',
+      '88888888888888888888888888888888',
+      '88888888888888888888888888888888',
+      '88888888888888888655688888888888',
+      '88888888888888886566668888888888',
+      '88888887777888875566676888888888',
+      '88888866667688865555566888888888',
+      '88888666666668855555566888888888',
+      '88888566555667755555566888888888',
+      '88888655555566754555567888888888',
+      '88888655555555654455677888888888',
+      '88888865555544443445565555568888',
+      '88888886554444477344555555666888',
+      '88888888655458888874444555566888',
+      '88888888875478888886345555566888',
+      '88888666655488888886445555666888',
+      '88877665554488888877455566667888',
+      '88866555554378888776455666678888',
+      '88866555554357777753456888888888',
+      '88866555554545656533455688888888',
+      '88866655555554434444455568888888',
+      '88886555566655445555555556888888',
+      '88888777886555545555555555888888',
+      '88888888876555555766555565888888',
+      '88888888876555555876655665888888',
+      '88888888876555555886666666888888',
+      '88888888876665557888766678888888',
+      '88888888886666568888888888888888',
+      '88888888888655688888888888888888',
+      '88888888888888888888888888888888',
+      '88888888888888888888888888888888',
+      '88888888888888888888888888888888',
     ],
   },
 };
