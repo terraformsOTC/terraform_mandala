@@ -16,9 +16,9 @@
 // A cover's speckle is fresh for every seal (and redrawn when a seal does not fit it); decoding
 // needs only the drawing.
 import { MATHCASTLES_DREAMS } from './mandala.js';
-import { fieldOf, budOf, withHeights, partTops, SUNFLOWER_BUD, MINI_FLOWER_ROWS, MINI_FLOWER_VARIANTS, miniFlowerRows } from './sunflower.js';
+import { fieldOf, partsOf, withHeights, partTops, SUNFLOWER_PARTS, MINI_FLOWER_ROWS, MINI_FLOWER_VARIANTS, miniFlowerRows } from './sunflower.js';
 
-export { fieldOf, budOf, withHeights, partTops, SUNFLOWER_BUD, MINI_FLOWER_ROWS, MINI_FLOWER_VARIANTS, miniFlowerRows };
+export { fieldOf, partsOf, withHeights, partTops, SUNFLOWER_PARTS, MINI_FLOWER_ROWS, MINI_FLOWER_VARIANTS, miniFlowerRows };
 
 export const SEAL_COVERS = {
   flower: { rows: MATHCASTLES_DREAMS.p6454.rows, p: 0.15, frame: 64, size: null },
@@ -33,15 +33,15 @@ export function freshRandom() {
   return globalThis.crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
 }
 
-// The bud of each cover's drawing (the sunflower's is shared by its variants).
-const FLOWER_BUD = budOf(MATHCASTLES_DREAMS.p6454.rows);
-export const budFor = (name) => (name === 'miniflower' ? SUNFLOWER_BUD : FLOWER_BUD);
-/** The heights each cover's parts are drawn at (petals: the full flower 7, the sunflower 6; bud 8). */
-export const coverTops = (name) => partTops(name === 'miniflower' ? miniFlowerRows(0) : SEAL_COVERS.flower.rows, budFor(name));
+// The parts of each cover's drawing (the sunflower's are shared by its variants).
+const FLOWER_PARTS = partsOf(MATHCASTLES_DREAMS.p6454.rows);
+export const partsFor = (name) => (name === 'miniflower' ? SUNFLOWER_PARTS : FLOWER_PARTS);
+/** The heights each cover's parts are drawn at (petals: the flower 7, the sunflower 6; corona 4; bud 8). */
+export const coverTops = (name) => partTops(name === 'miniflower' ? miniFlowerRows(0) : SEAL_COVERS.flower.rows, partsFor(name));
 
 /**
  * A cover to seal into: the drawing (for the sunflower, a random one of its variants) at the
- * heights asked for ({ petal, bud }, see withHeights), its field speckled (rnd() < p turns an 8 into
+ * heights asked for ({ petal, corona, bud }, see withHeights), its field speckled (rnd() < p turns an 8 into
  * a 7), and alt[c], the digit field cell c may become (8 <-> 7), null for every other cell. Also
  * returns the drawing before the speckle and its variant.
  */
@@ -50,7 +50,7 @@ export function grainCover(name, rnd = freshRandom, heights = {}) {
   const variant = name === 'miniflower' ? Math.min(MINI_FLOWER_VARIANTS - 1, Math.floor(rnd() * MINI_FLOWER_VARIANTS)) : null;
   const drawn = variant === null ? SEAL_COVERS[name].rows : miniFlowerRows(variant);
   const field = fieldOf(drawn);
-  const rows = withHeights(drawn, field, budFor(name), heights);
+  const rows = withHeights(drawn, field, partsFor(name), heights);
   const hm = rows.join('').split('').map((v, i) => (field[i] && rnd() < p ? '7' : v));
   return { heightmap: hm.join(''), alt: hm.map((v, i) => (field[i] ? (v === '8' ? 7 : 8) : null)), drawing: rows.join(''), variant };
 }

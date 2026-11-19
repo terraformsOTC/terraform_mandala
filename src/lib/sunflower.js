@@ -106,58 +106,66 @@ export function miniFlowerRows(v) {
   return g.map((r) => r.join(''));
 }
 
-// The flowers' two parts (James, 2026-11-19: "change the heights of the flower glyph for the seal
-// drawing ... toggle the petal and central seed bud heights separately"). The bud is the hole and
-// what rings it: from the enclosed 8s outwards through the ring (3), base (4) and crease (7) cells,
-// found on the drawing before any gradient (so a petal's gradient 4s are not taken for it); every
-// other cell that is not the field is petal.
-export function budOf(rows) {
-  const field = fieldOf(rows), g = rows.join(''), bud = new Array(1024).fill(false), stack = [];
-  for (let i = 0; i < 1024; i++) if (g[i] === '8' && !field[i]) { bud[i] = true; stack.push(i); }
-  while (stack.length) {
-    const i = stack.pop(), r = Math.floor(i / 32), c = i % 32;
-    for (const [y, x] of [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]) {
-      if (y < 0 || y > 31 || x < 0 || x > 31) continue;
-      const j = 32 * y + x;
-      if (!bud[j] && !field[j] && '347'.includes(g[j])) { bud[j] = true; stack.push(j); }
+// The flowers' three parts (James, 2026-11-19: "toggle the petal and central seed bud heights
+// separately", then "There is an intermediate zone between the petals and the buds ... Can we toggle
+// this also?"). Found on the drawing before any gradient (so a petal's gradient 4s are not taken):
+//   bud     the hole (the enclosed 8s) and the creases (7) that shade it
+//   corona  the ring (3) and base (4) between the bud and the petals (botany: the ring between a
+//           flower's petals and its centre)
+//   petals  every other cell that is not the field
+export function partsOf(rows) {
+  const field = fieldOf(rows), g = rows.join('');
+  const bud = new Array(1024).fill(false), corona = new Array(1024).fill(false);
+  const flood = (mask, seeds, allowed) => {
+    const stack = [...seeds];
+    while (stack.length) {
+      const i = stack.pop(), r = Math.floor(i / 32), c = i % 32;
+      for (const [y, x] of [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]) {
+        if (y < 0 || y > 31 || x < 0 || x > 31) continue;
+        const j = 32 * y + x;
+        if (!mask[j] && !bud[j] && !field[j] && allowed.includes(g[j])) { mask[j] = true; stack.push(j); }
+      }
     }
-  }
-  return bud;
+  };
+  const hole = [];
+  for (let i = 0; i < 1024; i++) if (g[i] === '8' && !field[i]) { bud[i] = true; hole.push(i); }
+  flood(bud, hole, '7');
+  flood(corona, bud.map((b, i) => (b ? i : -1)).filter((i) => i >= 0), '34');
+  return { bud, corona };
 }
-// The sunflower's bud, from the hand-drawn flower with its always-on tweaks (every variant shares it).
-export const SUNFLOWER_BUD = (() => {
+// The sunflower's parts, from the hand-drawn flower with its always-on tweaks (every variant shares them).
+export const SUNFLOWER_PARTS = (() => {
   const g = MINI_FLOWER_ROWS.map((r) => [...r]);
   for (const [r, c] of ROUND_CENTRE) g[r][c] = '3';
   for (const [r, c] of CRISP) g[r][c] = '6';
-  return budOf(g.map((r) => r.join('')));
+  return partsOf(g.map((r) => r.join('')));
 })();
 
+const partOf = (parts, i) => (parts.bud[i] ? 'bud' : parts.corona[i] ? 'corona' : 'petal');
+
 /** The highest height of each part in a drawing: what the seal maker's sliders show "as drawn". */
-export function partTops(rows, bud) {
-  const field = fieldOf(rows), g = rows.join('');
-  let petal = 0, budTop = 0;
-  for (let i = 0; i < 1024; i++) {
-    if (field[i]) continue;
-    if (bud[i]) budTop = Math.max(budTop, Number(g[i])); else petal = Math.max(petal, Number(g[i]));
-  }
-  return { petal, bud: budTop };
+export function partTops(rows, parts) {
+  const field = fieldOf(rows), g = rows.join(''), tops = { petal: 0, corona: 0, bud: 0 };
+  for (let i = 0; i < 1024; i++) if (!field[i]) { const k = partOf(parts, i); tops[k] = Math.max(tops[k], Number(g[i])); }
+  return tops;
 }
 
 /**
- * A drawing with its petals and/or bud raised or lowered: each part moves by (wanted top - its own
- * top), so its rims and gradient keep their steps until they reach 0 (or 9). null leaves a part as
- * drawn. The field is never touched (field: the drawing's own, before any change), so a grain seal's
- * room is the same at any heights.
+ * A drawing with its petals, corona and/or bud raised or lowered: each part moves by (wanted top -
+ * its own top), so its rims and gradient keep their steps until they reach 0 (or 9). null leaves a
+ * part as drawn. The field is never touched (field: the drawing's own, before any change), so a
+ * grain seal's room is the same at any heights.
  */
-export function withHeights(rows, field, bud, { petal = null, bud: budH = null } = {}) {
-  if (petal == null && budH == null) return rows;
-  const tops = partTops(rows, bud);
+export function withHeights(rows, field, parts, heights = {}) {
+  const want = { petal: heights.petal ?? null, corona: heights.corona ?? null, bud: heights.bud ?? null };
+  if (want.petal == null && want.corona == null && want.bud == null) return rows;
+  const tops = partTops(rows, parts);
   const g = rows.join('').split('');
   for (let i = 0; i < 1024; i++) {
     if (field[i]) continue;
-    const want = bud[i] ? budH : petal;
-    if (want == null) continue;
-    g[i] = String(Math.max(0, Math.min(9, Number(g[i]) - ((bud[i] ? tops.bud : tops.petal) - want))));
+    const k = partOf(parts, i);
+    if (want[k] == null) continue;
+    g[i] = String(Math.max(0, Math.min(9, Number(g[i]) - (tops[k] - want[k]))));
   }
   return Array.from({ length: 32 }, (_, r) => g.slice(32 * r, 32 * r + 32).join(''));
 }

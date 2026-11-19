@@ -14,7 +14,7 @@ import { EXPERIMENTAL_DESIGNS, normalizeExperimental } from '@/lib/experimental'
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
   'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'glyph', 'line', 'edge', 'ground', 'pupil', 'eye', 'figure', 'grain', 'escher', 'tones', 'renderer', 'antenna',
-  'exp', 'shift', 'flow', 'bg', 'seal', 'salt', 'layout', 'petal', 'bud',
+  'exp', 'shift', 'flow', 'bg', 'seal', 'salt', 'layout', 'petal', 'corona', 'bud',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -195,6 +195,7 @@ function DesignerInner({ variant }) {
       if (!params.sealSalt) next.set('salt', 'off');
       if (params.sealLayout !== DEFAULTS.sealLayout) next.set('layout', params.sealLayout);
       if (params.sealPetal != null) next.set('petal', String(params.sealPetal));
+      if (params.sealCorona != null) next.set('corona', String(params.sealCorona));
       if (params.sealBud != null) next.set('bud', String(params.sealBud));
       if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
       if (antenna) next.set('antenna', antenna);
@@ -358,7 +359,7 @@ function footerCredit(params) {
   if (params.algorithm === 'seal') {
     // The flower layout hides seals in #6454's flower (the smaller one for sealed messages): credit its dreamer.
     if (sealLayoutFor(params.sealMode, params.sealLayout) === 'flower') {
-      return <FlowerCredit small={params.sealMode === 'sealed'} changed={params.sealPetal != null || params.sealBud != null} />;
+      return <FlowerCredit small={params.sealMode === 'sealed'} changed={params.sealPetal != null || params.sealCorona != null || params.sealBud != null} />;
     }
     return <>A seal hides a message, a sealed message or a commitment in the drawing. Decode one, and read the format, at <a href="/seal">/seal</a>.</>;
   }
@@ -400,7 +401,7 @@ function FlowerCredit({ small, changed = false }) {
       <a href={`https://terraformexplorer.xyz/dreamers/${dream.dreamer}`} target="_blank" rel="noopener noreferrer">
         {dream.dreamer.slice(0, 6)}…{dream.dreamer.slice(-4)} ↗
       </a>
-      {small || changed ? '' : ', cell for cell'}{changed ? ', at the petal and bud heights set here' : ''}; the seal hides in its grain. Decode one, and read the format, at <a href="/seal">/seal</a>.
+      {small || changed ? '' : ', cell for cell'}{changed ? ', at the heights set here' : ''}; the seal hides in its grain. Decode one, and read the format, at <a href="/seal">/seal</a>.
     </>
   );
 }
@@ -512,6 +513,7 @@ function sealParamsFromUrl(searchParams) {
     sealLayout: sealLayoutFor(mode, SEAL_LAYOUTS.includes(layout) ? layout : DEFAULTS.sealLayout),
     sealHeightmap: null,
     sealPetal: height(searchParams?.get('petal')),
+    sealCorona: height(searchParams?.get('corona')),
     sealBud: height(searchParams?.get('bud')),
   };
 }

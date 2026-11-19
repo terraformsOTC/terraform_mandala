@@ -345,6 +345,7 @@ export function defaultParams() {
     sealLayout: DEFAULTS.sealLayout,
     sealHeightmap: null,
     sealPetal: null,
+    sealCorona: null,
     sealBud: null,
     grain: DEFAULTS.grain,
     spokeCount: DEFAULTS.spokeCount,

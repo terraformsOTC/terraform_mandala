@@ -1,7 +1,7 @@
 import { generateEscher, ESCHER_DEFAULT } from './escher.js';
 import { generateExperimental, EXPERIMENTAL_DEFAULT } from './experimental.js';
 import { SEAL_DEMOS, SEAL_DEMO_VARIANTS } from './sealDemos.js';
-import { fieldOf, budOf, withHeights, SUNFLOWER_BUD, miniFlowerRows } from './sunflower.js';
+import { fieldOf, partsOf, withHeights, SUNFLOWER_PARTS, miniFlowerRows } from './sunflower.js';
 import { makeRng } from './seedrandom.js';
 import { validate } from './heightmap.js';
 
@@ -68,6 +68,7 @@ export const DEFAULTS = {
   sealHeightmap: null,    // the user's sealed drawing (never in the URL); null = the example
   sealPetal: null,        // the flower's petal height (its top); null = as drawn (James, 2026-11-19)
   sealBud: null,          // the flower's bud (centre) height; null = as drawn
+  sealCorona: null,       // the flower's corona (the ring between bud and petals) height; null = as drawn
   grain: 0,          // 0 off, 1 on
   spokeCount: 3,
   twist: 2,
@@ -108,8 +109,8 @@ export function figureFor(set, figure) {
   return list.includes(figure) ? figure : list[0];
 }
 
-let FLOWER_BUD = null;
-const flowerBud = () => (FLOWER_BUD ??= budOf(MATHCASTLES_DREAMS.p6454.rows));
+let FLOWER_PARTS = null;
+const flowerParts = () => (FLOWER_PARTS ??= partsOf(MATHCASTLES_DREAMS.p6454.rows));
 
 export function generateMandala(opts = {}) {
   const seed = opts.seed ?? 'mandala';
@@ -161,10 +162,10 @@ export function generateMandala(opts = {}) {
     // Before anything is sealed, the flower demo shows the petal and bud heights asked for (a seal
     // made with [seal it] is drawn at them already). Only the drawing's own cells move, never the
     // grain; so the demo then no longer reads as an inscription, and the maker says so.
-    if (layout === 'flower' && hm === SEAL_DEMOS[demo] && (opts.sealPetal != null || opts.sealBud != null)) {
+    if (layout === 'flower' && hm === SEAL_DEMOS[demo] && (opts.sealPetal != null || opts.sealCorona != null || opts.sealBud != null)) {
       const drawn = demo === 'miniflower' ? miniFlowerRows(SEAL_DEMO_VARIANTS.miniflower) : MATHCASTLES_DREAMS.p6454.rows;
       const field = fieldOf(drawn);
-      const moved = withHeights(drawn, field, demo === 'miniflower' ? SUNFLOWER_BUD : flowerBud(), { petal: opts.sealPetal, bud: opts.sealBud }).join('');
+      const moved = withHeights(drawn, field, demo === 'miniflower' ? SUNFLOWER_PARTS : flowerParts(), { petal: opts.sealPetal, corona: opts.sealCorona, bud: opts.sealBud }).join('');
       hm = [...hm].map((ch, i) => (field[i] ? ch : moved[i])).join('');
     }
     grid = Array.from({ length: SIDE }, (_, r) => hm.slice(r * SIDE, (r + 1) * SIDE).split(''));

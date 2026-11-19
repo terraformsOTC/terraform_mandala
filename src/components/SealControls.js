@@ -122,7 +122,7 @@ export default function SealControls({ params, update, lastCommit }) {
         // A fresh speckle for every seal; when the trellis cannot reach a frame in it, another.
         let base = null;
         for (let t = 0; t < COVER_TRIES && !enc; t++) {
-          base = grainCover(cover, undefined, { petal: params.sealPetal, bud: params.sealBud });
+          base = grainCover(cover, undefined, { petal: params.sealPetal, corona: params.sealCorona, bud: params.sealBud });
           try {
             enc = await Sl.encodeGrain({ ...input, heightmap: base.heightmap, alt: base.alt, size: SEAL_COVERS[cover].size ?? undefined });
           } catch (e) {
@@ -179,6 +179,7 @@ export default function SealControls({ params, update, lastCommit }) {
         <PartHeights
           tops={coverTops(cover)}
           petal={params.sealPetal}
+          corona={params.sealCorona}
           bud={params.sealBud}
           // a seal is drawn at its heights: other heights mean sealing again
           onChange={(patch) => update({ ...patch, sealHeightmap: null })}
@@ -235,13 +236,13 @@ export default function SealControls({ params, update, lastCommit }) {
           shares its first cells, the format&apos;s mark; the rest is the content.
         </p>
       )}
-      {!current && isGrain && params.sealPetal == null && params.sealBud == null && (
+      {!current && isGrain && params.sealPetal == null && params.sealCorona == null && params.sealBud == null && (
         <p className="opacity-50 leading-relaxed">
           On show: an example, an inscription of &ldquo;{SEAL_DEMO_TEXT}&rdquo; hidden in the {cover === 'miniflower' ? 'sunflower' : 'flower'}&apos;s
           grain. Your seal gets a fresh speckle of its own.
         </p>
       )}
-      {!current && isGrain && (params.sealPetal != null || params.sealBud != null) && (
+      {!current && isGrain && (params.sealPetal != null || params.sealCorona != null || params.sealBud != null) && (
         <p className="opacity-50 leading-relaxed">
           On show: the {cover === 'miniflower' ? 'sunflower' : 'flower'} at these heights, not sealed yet. [seal it] draws
           your seal at them, with a fresh speckle.
@@ -344,10 +345,11 @@ function revealFile(s, c, links) {
   return L.join('\n');
 }
 
-// The flower's two heights (James, 2026-11-19: "toggle the petal and central seed bud heights
-// separately"). Each slider is the part's top height; the part moves as a whole (rims and gradient
-// keep their steps until they reach 0), so 0 lays it flat. null = as drawn.
-function PartHeights({ tops, petal, bud, onChange }) {
+// The flower's three heights (James, 2026-11-19: "toggle the petal and central seed bud heights
+// separately", then the zone between them: the corona). Each slider is the part's top height; the
+// part moves as a whole (rims and gradient keep their steps until they reach 0), so 0 lays it flat.
+// null = as drawn.
+function PartHeights({ tops, petal, corona, bud, onChange }) {
   const row = (label, key, value, top) => (
     <div className="flex flex-col gap-1">
       <span className="opacity-60 uppercase tracking-wider">
@@ -362,6 +364,7 @@ function PartHeights({ tops, petal, bud, onChange }) {
   return (
     <div className="flex flex-col gap-2">
       {row('petal height', 'sealPetal', petal, tops.petal)}
+      {row('corona height', 'sealCorona', corona, tops.corona)}
       {row('bud height', 'sealBud', bud, tops.bud)}
     </div>
   );
