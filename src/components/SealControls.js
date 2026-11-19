@@ -37,7 +37,7 @@ const GRAIN_HELP = {
 };
 const GRAIN_NOTE = {
   flower: 'Hidden in the grain: the flower stays exactly as dreamt (#6454); only speckles of its field move, by one height.',
-  miniflower: 'Hidden in the grain of the smaller flower, whose wider field holds an encrypted message; only speckles move, by one height, and every sealed flower looks alike.',
+  miniflower: 'Hidden in the grain of a smaller flower, whose wider field holds an encrypted message. Its petals are drawn a little differently for every seal, so each one is unique; only speckles move, by one height, and the speckle stays as dense whatever the message\'s length.',
 };
 
 export default function SealControls({ params, update, lastCommit }) {

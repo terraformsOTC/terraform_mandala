@@ -28,6 +28,13 @@ const csp = [
 ].join('; ');
 
 const nextConfig = {
+  // The seal maker moved off the heightmap designer to /seal/make (2026-11-19): old links
+  // (/?seed=seal&algo=seal&token=…&seal=…&layout=…) land there, their query passed through.
+  async redirects() {
+    return [
+      { source: '/', has: [{ type: 'query', key: 'algo', value: 'seal' }], destination: '/seal/make', permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

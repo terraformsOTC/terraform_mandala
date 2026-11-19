@@ -26,6 +26,7 @@ export default function MandalaDesigner({
   antenna,
   onAntennaChange,
   walletAddress,
+  variant = 'mandala',   // 'seal': the seal maker at /seal/make (the seal pattern alone)
 }) {
   // The antenna shown: the user's choice, else the parcel's own. The preview and the GIF
   // export both get the parcel data with ANTENNA switched to match.
@@ -68,7 +69,7 @@ export default function MandalaDesigner({
     >
       <div className="flex flex-col gap-4">
         <h2 className="text-lg opacity-90">[animation controls]</h2>
-        <MandalaControls params={params} onChange={onParamsChange} lastCommit={lastCommit} />
+        <MandalaControls params={params} onChange={onParamsChange} lastCommit={lastCommit} variant={variant} />
         <HeightmapInspector heightmap={generated.heightmap} />
         <CommitPanel
           tokenId={animData?.tokenId}

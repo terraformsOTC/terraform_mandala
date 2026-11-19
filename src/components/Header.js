@@ -19,12 +19,6 @@ export default function Header({ walletAddress, onConnect, onDisconnect }) {
           <a className="md:my-0 no-underline" href="/">[terraform mandala]</a>
         </div>
         <div className="flex items-center gap-4">
-          <a
-            href="/?seed=experimental&algo=experimental"
-            className="text-sm opacity-60 hover:opacity-100 transition-opacity no-underline hidden md:inline whitespace-nowrap"
-          >
-            [experimental]
-          </a>
           {/* Shown on phones too: the decoder works there (the designer does not). */}
           <a
             href="/seal"

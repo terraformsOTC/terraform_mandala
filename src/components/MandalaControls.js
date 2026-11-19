@@ -10,7 +10,7 @@ import { EXPERIMENTAL_DESIGNS, EXPERIMENTAL_CATEGORIES, experimentalDesignsIn, n
 import SealControls, { SEAL_MODE_LABELS, sealLayoutLabel } from './SealControls';
 import { SEAL_MODES, SEAL_LAYOUTS, sealLayoutFor } from '@/lib/mandala';
 
-export default function MandalaControls({ params, onChange, lastCommit }) {
+export default function MandalaControls({ params, onChange, lastCommit, variant = 'mandala' }) {
   const update = (patch) => onChange({ ...params, ...patch });
   const isClassic = params.algorithm === 'classic';
   const isRings = params.algorithm === 'rings';
@@ -54,7 +54,7 @@ export default function MandalaControls({ params, onChange, lastCommit }) {
       </Field>
       )}
 
-      <PatternMenu params={params} update={update} escher={escher} />
+      <PatternMenu params={params} update={update} escher={escher} variant={variant} />
 
       <div className="flex flex-col gap-2">
         {/* Glyphs and Escher designs set their own heights below; peak and min do not apply. */}
@@ -235,12 +235,15 @@ export default function MandalaControls({ params, onChange, lastCommit }) {
 //              uses the smaller flower; 2026-11-19, the default) / eight-fold / four-fold / pinwheel /
 //              mirror / half-turn / none (in the digits, a sealed message needs four-fold or less)
 // Picking a higher level resets the levels under it to their first choice.
-function PatternMenu({ params, update, escher }) {
+// The seal is not one of the heightmap patterns since 2026-11-19 (James: "separate the seal
+// function out from the normal heightmaps"): the seal maker (/seal/make) shows only its mode and
+// layout, and the heightmap designer's pattern menu leaves the seal out.
+function PatternMenu({ params, update, escher, variant }) {
   const opts = (values, label = (v) => v) => values.map((v) => ({ value: String(v), label: label(v) }));
-  const levels = [{
+  const levels = variant === 'seal' ? [] : [{
     label: 'pattern',
     value: params.algorithm,
-    options: opts(PATTERNS),
+    options: opts(PATTERNS.filter((p) => p !== 'seal')),
     onChange: (algorithm) => update({ algorithm }),
   }];
 

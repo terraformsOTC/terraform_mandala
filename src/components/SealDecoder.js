@@ -136,7 +136,7 @@ export default function SealDecoder() {
         at a time), a <strong>sealed message</strong> (encrypted, opened later by a published secret) or an{' '}
         <strong>inscription</strong> anyone can read. The commit transaction dates it.
       </p>
-      <a href="/?seed=seal&algo=seal" className="btn-primary btn-sm text-xs no-underline self-start">[make a seal — connect the wallet that owns a dreaming parcel]</a>
+      <a href="/seal/make" className="btn-primary btn-sm text-xs no-underline self-start">[make a seal]</a>
 
       <label className="flex flex-col gap-1">
         <span className="text-xs opacity-60 uppercase tracking-wider">parcel number, commit transaction, or heightmap</span>

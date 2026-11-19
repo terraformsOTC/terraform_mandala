@@ -15,6 +15,12 @@ export default function sitemap() {
       priority: 0.8,
     },
     {
+      url: `${SITE_URL}/seal/make`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.7,
+    },
+    {
       url: `${SITE_URL}/antenna`,
       lastModified: new Date(),
       changeFrequency: 'monthly',
