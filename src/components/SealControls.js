@@ -20,6 +20,11 @@ export const SEAL_LAYOUT_LABELS = { flower: 'flower', eighth: 'eight-fold', quar
 // A sealed message goes into the sunflower (James, 2026-11-19: "change the name to sunflower").
 export const sealLayoutLabel = (layout, mode) => (layout === 'flower' && mode === 'sealed' ? 'sunflower' : SEAL_LAYOUT_LABELS[layout]);
 const COVER_TRIES = 8;   // fresh speckles to try before a grain seal gives up (every kind fitted 30/30 at the first)
+// The drawing follows the message (James, 2026-11-19: "The heightmap grain with the secret sealed in
+// it should change as I change the message"): this long after the content stops changing, it is
+// sealed again; any change drops the seal on show at once, so a seal is never shown (or committed)
+// for content that is no longer in the box.
+const AUTO_SEAL_MS = 600;
 const MAX_FILE = 256 * 1024 * 1024;
 const BOX = { border: '1px solid rgba(232,232,232,0.15)' };
 
@@ -56,8 +61,8 @@ export default function SealControls({ params, update, lastCommit }) {
   const [sealed, setSealed] = useState(null);   // what made the drawing on show, with its reveal
   const [stored, setStored] = useState(null);   // { bytes, raw } of the text as stored
   const [S, setS] = useState(null);
+  const [failedKey, setFailedKey] = useState(null);   // content whose sealing failed: not retried on its own
   const latest = useRef({});
-  latest.current = { kind, layout, update };
 
   useEffect(() => { loadSeal().then(setS); }, []);
 
@@ -87,14 +92,36 @@ export default function SealControls({ params, update, lastCommit }) {
       : S.sealCapacity(layout, kind);
   const items = useMemo(() => text.split(/\r\n?|\n/).map((t) => t.trim()).filter(Boolean), [text]);
   const tooLong = cap != null && stored && stored.bytes > cap;
-  const ready = !busy && !tooLong && (
+  const contentReady = !tooLong && (
     kind === 'list' ? items.length > 0 && items.length <= 256
       : src === 'file' ? !!file
         : src === 'digest' ? /^[0-9a-f]{64}$/i.test(digest.trim().split(/\s+/)[0] || '')
           : text.length > 0);
+  const ready = !busy && contentReady;
 
-  // The drawing on show is this panel's seal only while the heightmap is still the one it made.
-  const current = sealed && params.sealHeightmap === sealed.heightmap ? sealed : null;
+  // Everything a seal is made of: when any of it changes, a seal made before is for other content.
+  const contentKey = JSON.stringify([kind, layout, src, kind === 'list' ? items : src === 'file' ? file?.sha256 ?? null : src === 'digest' ? digest.trim() : text,
+    params.sealPetal ?? null, params.sealCorona ?? null, params.sealBud ?? null]);
+  // The drawing on show is this panel's seal only while the heightmap is still the one it made, for
+  // the content now in the panel.
+  const current = sealed && params.sealHeightmap === sealed.heightmap && sealed.key === contentKey ? sealed : null;
+  latest.current = { kind, layout, update, key: contentKey, busy, sealedKey: current ? current.key : null };
+
+  // An edit drops the seal on show (the preview goes back to the example until it is sealed again).
+  useEffect(() => {
+    if (sealed && sealed.key !== contentKey && params.sealHeightmap === sealed.heightmap) update({ sealHeightmap: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentKey]);
+  // ... and a moment after the content stops changing, it is sealed again.
+  useEffect(() => {
+    if (!S || !contentReady || busy || current || failedKey === contentKey) return undefined;
+    const t = setTimeout(() => {
+      const L = latest.current;
+      if (L.key === contentKey && !L.busy && L.sealedKey !== contentKey) seal();
+    }, AUTO_SEAL_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [S, contentKey, contentReady, busy, !!current, failedKey]);
   const committed = current && lastCommit && lastCommit.heightmap === current.heightmap ? lastCommit : null;
 
   async function pickFile(f) {
@@ -108,6 +135,7 @@ export default function SealControls({ params, update, lastCommit }) {
   }
 
   async function seal() {
+    const key = contentKey;
     setBusy(true);
     setError(null);
     try {
@@ -147,16 +175,18 @@ export default function SealControls({ params, update, lastCommit }) {
       if (ok && kind === 'hash') ok = await Sl.verifyHash(dec, content);
       if (ok && kind === 'list') ok = (await Promise.all(enc.reveal.items.map((it) => Sl.verifyListItem(dec, it.token)))).every((r) => r.ok);
       if (!ok) throw new Error('the drawing did not decode back to what you sealed, so it was not used');
-      // The mode or layout changed while sealing: this seal is for neither; drop it.
-      if (latest.current.kind !== kind || latest.current.layout !== layout) return;
+      // The content, mode, layout or heights changed while sealing: this seal is for none of them; drop it.
+      if (latest.current.key !== key) return;
+      setFailedKey(null);
       setSealed({
-        heightmap: enc.heightmap, kind, layout, reveal: enc.reveal, compressed: !!enc.compressed,
+        key, heightmap: enc.heightmap, kind, layout, reveal: enc.reveal, compressed: !!enc.compressed,
         grain: isGrain ? { cover, size: enc.size, changed: enc.changed } : null,
         source: src, text: kind === 'list' ? null : Sl.normalizeText(text), file: src === 'file' ? { name: file.name, sha256: file.sha256 } : null,
       });
       latest.current.update({ sealHeightmap: enc.heightmap });
     } catch (e) {
       setError(e.message);
+      setFailedKey(key);
     } finally {
       setBusy(false);
     }
@@ -233,19 +263,21 @@ export default function SealControls({ params, update, lastCommit }) {
       {!current && !isGrain && (
         <p className="opacity-50 leading-relaxed">
           On show: an example seal, an inscription of &ldquo;{SEAL_DEMO_TEXT}&rdquo;. Every seal of the same layout
-          shares its first cells, the format&apos;s mark; the rest is the content.
+          shares its first cells, the format&apos;s mark; the rest is the content. Write your own and it is sealed
+          into the drawing a moment after you stop typing.
         </p>
       )}
       {!current && isGrain && params.sealPetal == null && params.sealCorona == null && params.sealBud == null && (
         <p className="opacity-50 leading-relaxed">
           On show: an example, an inscription of &ldquo;{SEAL_DEMO_TEXT}&rdquo; hidden in the {cover === 'miniflower' ? 'sunflower' : 'flower'}&apos;s
-          grain. Your seal gets a fresh speckle of its own.
+          grain. Write your own and it is sealed into the drawing a moment after you stop typing, with a fresh
+          speckle of its own.
         </p>
       )}
       {!current && isGrain && (params.sealPetal != null || params.sealCorona != null || params.sealBud != null) && (
         <p className="opacity-50 leading-relaxed">
-          On show: the {cover === 'miniflower' ? 'sunflower' : 'flower'} at these heights, not sealed yet. [seal it] draws
-          your seal at them, with a fresh speckle.
+          On show: the {cover === 'miniflower' ? 'sunflower' : 'flower'} at these heights, not sealed yet. Your message is
+          sealed into it a moment after you stop typing, with a fresh speckle.
         </p>
       )}
 
@@ -260,6 +292,12 @@ export default function SealControls({ params, update, lastCommit }) {
           {current.kind === 'hash' && <span className="opacity-70 break-all">SHA-256 {current.reveal.digest}. Nothing secret to keep: reveal the {current.source === 'file' ? 'file' : current.source === 'digest' ? 'content behind the digest' : 'text'} whenever you like.</span>}
           {current.kind === 'list' && <span className="opacity-70">{current.reveal.items.length} items, each with its own reveal in the reveal file: publish one and the others stay hidden.</span>}
           {current.kind === 'inscription' && <span className="opacity-70">Not secret: anyone with the decoder can read it.</span>}
+          {(current.kind === 'sealed' || current.kind === 'commitment' || current.kind === 'list') && (
+            <span className="opacity-60">
+              Edit it and the drawing is sealed again, with a new {current.kind === 'sealed' ? 'secret' : current.kind === 'list' ? 'set of salts' : 'salt'}: keep the
+              reveal of the seal you commit.
+            </span>
+          )}
           {(current.kind === 'sealed' || current.kind === 'commitment' || current.kind === 'list') && (
             <span style={{ color: '#fbbf24' }}>
               This site keeps nothing. Lose the reveal file and nobody can ever {current.kind === 'sealed' ? 'open' : 'prove'} this seal, you included.
