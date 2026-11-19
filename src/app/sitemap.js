@@ -9,6 +9,12 @@ export default function sitemap() {
       priority: 1,
     },
     {
+      url: `${SITE_URL}/seal`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
       url: `${SITE_URL}/antenna`,
       lastModified: new Date(),
       changeFrequency: 'monthly',

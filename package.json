@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node -e \"require('fs').copyFileSync('src/lib/seal.js','public/seal/seal.mjs')\"",
     "build": "next build",
     "start": "next start"
   },

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { AbiCoder, keccak256 } from 'ethers';
-import { getProvider, TERRAFORMS_ADDRESS } from '@/lib/contract';
+import { rendererIndexOf } from '@/lib/contract';
 import { enforce } from '@/lib/rateLimit';
 
 // The parcel's renderer index (tokenToURIAddressIndex, a private mapping at
@@ -16,11 +15,10 @@ export async function GET(req, { params }) {
   const blocked = enforce(req, 'renderer', { max: 30, windowMs: 60_000 });
   if (blocked) return blocked;
   try {
-    const slot = keccak256(AbiCoder.defaultAbiCoder().encode(['uint256', 'uint256'], [tokenId, 11128]));
     // ?block=N pins the read to the block a migration was mined in.
     const block = Number(new URL(req.url).searchParams.get('block'));
     const blockTag = Number.isInteger(block) && block > 0 ? block : 'latest';
-    const index = BigInt(await getProvider().getStorage(TERRAFORMS_ADDRESS, slot, blockTag));
+    const index = await rendererIndexOf(tokenId, blockTag);
     return NextResponse.json({ tokenId, index: index.toString() }, { headers: { 'Cache-Control': 'no-store' } });
   } catch {
     return NextResponse.json({ error: 'failed to read renderer' }, { status: 502 });

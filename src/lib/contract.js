@@ -1,4 +1,4 @@
-import { JsonRpcProvider, Contract } from 'ethers';
+import { JsonRpcProvider, Contract, AbiCoder, keccak256 } from 'ethers';
 import { TERRAFORMS_ADDRESS, V2_RENDERER_ADDRESS, V0_RENDERER_ADDRESS } from './addresses';
 
 // Re-exported for server code. Client components import from ./addresses so the
@@ -14,6 +14,7 @@ const ABI = [
   'function balanceOf(address) view returns (uint256)',
   'function tokenOfOwnerByIndex(address, uint256) view returns (uint256)',
   'function ownerOf(uint256) view returns (address)',
+  'function tokenToCanvasData(uint256, uint256) view returns (uint256)',
 ];
 
 // Both v0 and v2 renderers expose the same tokenHTML signature, so we share
@@ -63,4 +64,12 @@ export function getV2RendererContract() {
 
 export function getV0RendererContract() {
   return new Contract(V0_RENDERER_ADDRESS, RENDERER_ABI, getProvider());
+}
+
+// The renderer a parcel uses: tokenToURIAddressIndex[id], a private mapping read
+// from storage slot 11128 (see commit.js, which reads it through the wallet).
+export const RENDERER_NAMES = ['v0', 'v1', 'v2'];
+export async function rendererIndexOf(tokenId, blockTag = 'latest') {
+  const slot = keccak256(AbiCoder.defaultAbiCoder().encode(['uint256', 'uint256'], [tokenId, 11128]));
+  return BigInt(await getProvider().getStorage(TERRAFORMS_ADDRESS, slot, blockTag));
 }

@@ -3,11 +3,14 @@
 import { randomSeed } from '@/lib/seedrandom';
 import {
   PATTERNS, RING_STYLES, TEMPLE_STYLES, GLYPH_SETS, GLYPH_FIGURES, FIGURE_LABELS,
-  figureFor, normalizeGlyphSet,
+  figureFor, normalizeGlyphSet, isDreamtGlyphSet,
 } from '@/lib/mandala';
 import { ESCHER_DESIGNS, ESCHER_CATEGORIES, escherDesignsIn, escherTones } from '@/lib/escher';
+import { EXPERIMENTAL_DESIGNS, EXPERIMENTAL_CATEGORIES, experimentalDesignsIn, normalizeExperimental } from '@/lib/experimental';
+import SealControls, { SEAL_MODE_LABELS, SEAL_LAYOUT_LABELS } from './SealControls';
+import { SEAL_MODES, SEAL_LAYOUTS, sealLayoutFor } from '@/lib/mandala';
 
-export default function MandalaControls({ params, onChange }) {
+export default function MandalaControls({ params, onChange, lastCommit }) {
   const update = (patch) => onChange({ ...params, ...patch });
   const isClassic = params.algorithm === 'classic';
   const isRings = params.algorithm === 'rings';
@@ -15,9 +18,13 @@ export default function MandalaControls({ params, onChange }) {
   const isWheel = isRings && params.ringStyle === 'wheel';
   const isGlyphs = params.algorithm === 'glyphs';
   const isEscher = params.algorithm === 'escher';
+  const isExperimental = params.algorithm === 'experimental';
+  const isSeal = params.algorithm === 'seal';
   // The Eye of Horus / Ra has a 2x2 pupil at its own height (James, 2026-11-13).
   const hasPupil = isGlyphs && normalizeGlyphSet(params.glyphSet) === 'hieroglyphs'
     && ['horus', 'ra'].includes(figureFor('hieroglyphs', params.figure));
+  // The mathcastles glyphs are drawn exactly as dreamt: no heights to set, no grain (2026-11-18).
+  const isDreamt = isGlyphs && isDreamtGlyphSet(params.glyphSet);
   const escher = ESCHER_DESIGNS[params.escherDesign] ? params.escherDesign : Object.keys(ESCHER_DESIGNS)[0];
   const tones = escherTones(escher, params.escherTones);
 
@@ -26,7 +33,7 @@ export default function MandalaControls({ params, onChange }) {
       {/* The seed only matters where something is random: not for the escher designs
           (fixed drawings), and for the glyphs only when grain is on (James, 2026-11-12:
           hide controls that don't change the drawing). */}
-      {!isEscher && !(isGlyphs && !params.grain) && (
+      {!isEscher && !isExperimental && !isSeal && !(isGlyphs && (!params.grain || isDreamt)) && (
       <Field label="seed">
         <div className="flex gap-2 items-center">
           <input
@@ -51,7 +58,7 @@ export default function MandalaControls({ params, onChange }) {
 
       <div className="flex flex-col gap-2">
         {/* Glyphs and Escher designs set their own heights below; peak and min do not apply. */}
-        {!isGlyphs && !isEscher && (
+        {!isGlyphs && !isEscher && !isExperimental && !isSeal && (
           <>
             <Slider
               label="peak height"
@@ -71,7 +78,7 @@ export default function MandalaControls({ params, onChange }) {
           </>
         )}
 
-        {isGlyphs && (
+        {isGlyphs && !isDreamt && (
           <>
             <Slider label="line height" isHeight value={params.glyphLine} min={0} max={9} onChange={(glyphLine) => update({ glyphLine })} />
             <Slider label="edge height" isHeight value={params.glyphEdge} min={0} max={9} onChange={(glyphEdge) => update({ glyphEdge })} />
@@ -94,6 +101,24 @@ export default function MandalaControls({ params, onChange }) {
             onChange={(v) => update({ escherTones: tones.map((t, k) => (k === i ? v : t)) })}
           />
         ))}
+
+        {isSeal && <SealControls params={params} update={update} lastCommit={lastCommit} />}
+
+        {/* Experimental drawings are fixed; these transforms explore them on a parcel. */}
+        {isExperimental && (
+          <>
+            <p className="text-xs opacity-60 leading-relaxed">
+              {EXPERIMENTAL_DESIGNS[normalizeExperimental(params.experimentalDesign)].ref}
+            </p>
+            <Slider
+              label="shift tones"
+              value={params.expShift ?? 0}
+              min={0}
+              max={7}
+              onChange={(expShift) => update({ expShift })}
+            />
+          </>
+        )}
 
         {isClassic && (
           <>
@@ -154,7 +179,7 @@ export default function MandalaControls({ params, onChange }) {
         )}
       </div>
 
-      {isGlyphs && (
+      {isGlyphs && !isDreamt && (
         <Field label="grain">
           <Toggle
             options={[[0, 'off'], [1, 'on']]}
@@ -162,6 +187,25 @@ export default function MandalaControls({ params, onChange }) {
             onSelect={(grain) => update({ grain })}
           />
         </Field>
+      )}
+
+      {isExperimental && (
+        <>
+          <Field label="flow">
+            <Toggle
+              options={[[0, 'forward'], [1, 'reverse']]}
+              value={params.expReverse ?? 0}
+              onSelect={(expReverse) => update({ expReverse })}
+            />
+          </Field>
+          <Field label="empty cells">
+            <Toggle
+              options={[[0, 'empty'], [1, 'ground']]}
+              value={params.expGround ?? 0}
+              onSelect={(expGround) => update({ expGround })}
+            />
+          </Field>
+        </>
       )}
 
       {isWheel && (
@@ -184,7 +228,11 @@ export default function MandalaControls({ params, onChange }) {
 //   temple   › cathedral / wat / ziggurat
 //   glyphs   › hieroglyphs › eye of horus / eye of ra / ankh / moon god / frog
 //            › nazca       › hummingbird / monkey / spider / condor
+//            › mathcastles › #1955 / #7341 (2026-11-18)
 //   escher   › spirals / tessellations › design
+//   experimental › winners / runners-up › design (2026-11-17)
+//   seal     › commitment / sealed message / inscription / list › eight-fold / four-fold / pinwheel /
+//              mirror / half-turn / none (a sealed message needs four-fold or less)
 // Picking a higher level resets the levels under it to their first choice.
 function PatternMenu({ params, update, escher }) {
   const opts = (values, label = (v) => v) => values.map((v) => ({ value: String(v), label: label(v) }));
@@ -225,7 +273,7 @@ function PatternMenu({ params, update, escher }) {
       onChange: (glyphSet) => update({ glyphSet, figure: figureFor(glyphSet, null) }),
     });
     levels.push({
-      label: set === 'nazca' ? 'figure' : 'glyph',
+      label: set === 'nazca' ? 'figure' : set === 'mathcastles' ? 'dream' : 'glyph',
       value: figureFor(set, params.figure),
       options: opts(GLYPH_FIGURES[set], (f) => FIGURE_LABELS[f] ?? f),
       onChange: (figure) => update({ figure }),
@@ -243,6 +291,35 @@ function PatternMenu({ params, update, escher }) {
       value: escher,
       options: opts(escherDesignsIn(category), (id) => ESCHER_DESIGNS[id].label),
       onChange: (escherDesign) => update({ escherDesign, escherTones: null }),
+    });
+  } else if (params.algorithm === 'experimental') {
+    const exp = normalizeExperimental(params.experimentalDesign);
+    const category = EXPERIMENTAL_DESIGNS[exp].category;
+    levels.push({
+      label: 'set',
+      value: category,
+      options: opts(EXPERIMENTAL_CATEGORIES),
+      onChange: (c) => update({ experimentalDesign: experimentalDesignsIn(c)[0] }),
+    });
+    levels.push({
+      label: 'design',
+      value: exp,
+      options: opts(experimentalDesignsIn(category), (id) => EXPERIMENTAL_DESIGNS[id].label),
+      onChange: (experimentalDesign) => update({ experimentalDesign }),
+    });
+  } else if (params.algorithm === 'seal') {
+    // Another mode or layout means another seal: back to the example until sealed again.
+    levels.push({
+      label: 'mode',
+      value: params.sealMode,
+      options: opts(SEAL_MODES, (m) => SEAL_MODE_LABELS[m]),
+      onChange: (sealMode) => update({ sealMode, sealLayout: sealLayoutFor(sealMode, params.sealLayout), sealHeightmap: null }),
+    });
+    levels.push({
+      label: 'symmetry',
+      value: sealLayoutFor(params.sealMode, params.sealLayout),
+      options: opts(SEAL_LAYOUTS.filter((l) => sealLayoutFor(params.sealMode, l) === l), (l) => SEAL_LAYOUT_LABELS[l]),
+      onChange: (sealLayout) => update({ sealLayout, sealHeightmap: null }),
     });
   }
 

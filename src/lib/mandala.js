@@ -1,4 +1,6 @@
 import { generateEscher, ESCHER_DEFAULT } from './escher.js';
+import { generateExperimental, EXPERIMENTAL_DEFAULT } from './experimental.js';
+import { SEAL_DEMOS } from './sealDemos.js';
 import { makeRng } from './seedrandom.js';
 import { validate } from './heightmap.js';
 
@@ -26,6 +28,8 @@ import { validate } from './heightmap.js';
 //               set freely, its lines never move (see generateGlyph).
 //   glyphs/nazca — our own drawings of four Nazca geoglyphs, in the same three
 //               heights (see NAZCA_DREAMS).
+//   glyphs/mathcastles — two heightmaps dreamt on parcels #1955 and #7341, copied
+//               cell for cell and drawn as dreamt (see MATHCASTLES_DREAMS).
 //
 // terraceCount drives complexity for the three temple variants. seed is the
 // RNG input via mulberry32+FNV-1a; identical seed → identical output.
@@ -53,6 +57,14 @@ export const DEFAULTS = {
   figure: 'horus',   // the glyph within the set; each set has its own (figureFor)
   escherDesign: ESCHER_DEFAULT,
   escherTones: null, // null = the design's own default heights (escher.js)
+  experimentalDesign: EXPERIMENTAL_DEFAULT, // experimental.js (James, 2026-11-17)
+  expShift: 0,       // 0-7: drawn heights turned round by n
+  expReverse: 0,     // 1: drawn heights flipped, so the motion runs the other way
+  expGround: 0,      // 1: empty cells (9) become ground (0)
+  sealMode: 'commitment', // seal.js (James, 2026-11-17): commitment | sealed | inscription | list
+  sealSalt: 1,            // commitment only: 1 salted, 0 a plain SHA-256 (James: "add it as a toggle")
+  sealLayout: 'eighth',   // eighth | quarter | pinwheel | mirror | rotation | plain
+  sealHeightmap: null,    // the user's sealed drawing (never in the URL); null = the example
   grain: 0,          // 0 off, 1 on
   spokeCount: 3,
   twist: 2,
@@ -64,12 +76,21 @@ export const RING_STYLES = ['concentric', 'wheel'];
 // Glyph sets and the glyphs in each (James, 2026-11-12: the menu reads
 // glyphs > hieroglyphs > eye of horus / eye of ra / ankh / moon god / frog, glyphs > nazca > condor...).
 // 'horus' was the hieroglyph set's name until then; old links still open it.
-export const GLYPH_SETS = ['hieroglyphs', 'nazca'];
+// mathcastles (James, 2026-11-18): two dreams copied as dreamt, so their heights are fixed
+// (no line / edge / ground sliders, no grain); see MATHCASTLES_DREAMS.
+export const GLYPH_SETS = ['hieroglyphs', 'nazca', 'mathcastles'];
 export const HIEROGLYPHS = ['horus', 'ra', 'ankh', 'moon', 'frog'];
 export const NAZCA_FIGURES = ['hummingbird', 'monkey', 'spider', 'condor'];
-export const GLYPH_FIGURES = { hieroglyphs: HIEROGLYPHS, nazca: NAZCA_FIGURES };
-export const FIGURE_LABELS = { horus: 'eye of horus', ra: 'eye of ra', ankh: 'ankh', moon: 'moon god', frog: 'frog' };
-export const PATTERNS = ['classic', 'rings', 'temple', 'glyphs', 'escher'];
+export const MATHCASTLES_FIGURES = ['p1955', 'p7341'];
+export const GLYPH_FIGURES = { hieroglyphs: HIEROGLYPHS, nazca: NAZCA_FIGURES, mathcastles: MATHCASTLES_FIGURES };
+export const FIGURE_LABELS = { horus: 'eye of horus', ra: 'eye of ra', ankh: 'ankh', moon: 'moon god', frog: 'frog', p1955: '#1955', p7341: '#7341' };
+// A set drawn exactly as dreamt: its heights can't be set and grain doesn't apply.
+export const isDreamtGlyphSet = (set) => normalizeGlyphSet(set) === 'mathcastles';
+export const PATTERNS = ['classic', 'rings', 'temple', 'glyphs', 'escher', 'experimental', 'seal'];
+export const SEAL_MODES = ['commitment', 'sealed', 'inscription', 'list'];
+export const SEAL_LAYOUTS = ['eighth', 'quarter', 'pinwheel', 'mirror', 'rotation', 'plain'];
+// A sealed message needs more room than the eight-fold layout has (seal.js).
+export const sealLayoutFor = (mode, layout) => (mode === 'sealed' && layout === 'eighth' ? 'quarter' : layout);
 
 export function normalizeGlyphSet(set) {
   if (set === 'horus') return 'hieroglyphs';
@@ -90,6 +111,8 @@ export function generateMandala(opts = {}) {
   const isWheel = algorithm === 'rings' && ringStyle === 'wheel';
   const isGlyph = algorithm === 'glyphs';
   const isEscher = algorithm === 'escher';
+  const isExperimental = algorithm === 'experimental';
+  const isSeal = algorithm === 'seal';
   const peakHeight = clampInt(opts.peakHeight ?? DEFAULTS.peakHeight, 1, 9);
   const minHeight = clampInt(opts.minHeight ?? DEFAULTS.minHeight, 0, peakHeight - 1);
   const variance = clampInt(opts.variance ?? DEFAULTS.variance, 1, 4);
@@ -112,12 +135,25 @@ export function generateMandala(opts = {}) {
   const rng = makeRng(seed);
 
   let grid;
-  if (isGlyph) {
+  if (isGlyph && glyphSet === 'mathcastles') {
+    const hm = MATHCASTLES_DREAMS[figure].rows.join('');
+    grid = Array.from({ length: SIDE }, (_, r) => hm.slice(r * SIDE, (r + 1) * SIDE).split(''));
+  } else if (isGlyph) {
     const dream = glyphSet === 'nazca' ? NAZCA_DREAMS[figure] : HIEROGLYPH_DREAMS[figure] ?? HORUS_DREAM;
     const mirrored = glyphSet === 'hieroglyphs' && figure === 'ra';
     grid = generateGlyph(rng, dream, mirrored, glyphLine, glyphEdge, glyphGround, grain, glyphPupil);
   } else if (isEscher) {
     grid = generateEscher(opts.escherDesign, opts.escherTones);
+  } else if (isSeal) {
+    // A seal is made asynchronously (WebCrypto) by SealControls and handed in whole;
+    // until then the layout's example. Its symmetry and integrity are seal.js's to check.
+    const layout = sealLayoutFor(opts.sealMode, SEAL_LAYOUTS.includes(opts.sealLayout) ? opts.sealLayout : DEFAULTS.sealLayout);
+    const hm = /^[0-9]{1024}$/.test(opts.sealHeightmap ?? '') ? opts.sealHeightmap : SEAL_DEMOS[layout];
+    grid = Array.from({ length: SIDE }, (_, r) => hm.slice(r * SIDE, (r + 1) * SIDE).split(''));
+  } else if (isExperimental) {
+    grid = generateExperimental(opts.experimentalDesign, {
+      shift: clampInt(opts.expShift ?? 0, 0, 7), reverse: Boolean(opts.expReverse), ground: Boolean(opts.expGround),
+    });
   } else if (isWheel) {
     grid = generateWheel(rng, spokeCount, twist, spin, minHeight, peakHeight);
   } else if (algorithm === 'rings') {
@@ -145,8 +181,8 @@ export function generateMandala(opts = {}) {
   const heightmap = grid.map((row) => row.join('')).join('');
 
   const v = validate(heightmap);
-  const symmetric = isGlyph || isEscher
-    ? true   // a fixed drawing, or an Escher design (spirals, tessellations): no symmetry to check
+  const symmetric = isGlyph || isEscher || isExperimental || isSeal
+    ? true   // a fixed drawing, an Escher design (spirals, tessellations) or an experimental one: no symmetry to check
     : isWheel
     ? isFourFold(heightmap)
     : v.vertical_sym && v.horizontal_sym && v.rotational_sym;
@@ -1320,6 +1356,91 @@ const FROG_DREAM = [
 ].join('');
 
 const HIEROGLYPH_DREAMS = { horus: HORUS_DREAM, ra: HORUS_DREAM, ankh: ANKH_DREAM, moon: MOON_DREAM, frog: FROG_DREAM };
+
+// mathcastles, the third glyph set (James, 2026-11-18): two dreams copied cell for cell from
+// their commitDreamToCanvas calldata (read from chain; ~/ops/reference-dreams/dreams.json) and
+// drawn exactly as dreamt, plain heights rather than glyph codes, so 9 is empty as on-chain.
+// The footer credits each dreamer and links the dream (page.js).
+export const MATHCASTLES_DREAMS = {
+  p1955: {
+    token: 1955,
+    dreamer: '0x000b75fcdc15d41277deb033c72d2c8d774ccced',
+    tx: '0x90360e3e6658b650d162181b38ea03ed1577633fa6b7d0cf9f688c7322fea5e0', // 2022-08-26
+    rows: [
+      '99999999999999999999999999999999',
+      '99999999900990999099099099999999',
+      '99999909990990099090990999009999',
+      '99900900990999999999999990099999',
+      '99990990999000000000009900999999',
+      '99999099900999999999990999990999',
+      '99909999099999999999999099900999',
+      '99909990900000999900009909909999',
+      '99990909099099099090990909999999',
+      '99999909099099099090990990990099',
+      '99999909900000999900009990900999',
+      '99999009999999999999999990999999',
+      '99009099009990999990999909999999',
+      '99909900009900999900999099099999',
+      '99990009900009099090090990099999',
+      '99990090990099090999000900999999',
+      '99999999000000000000909099999999',
+      '99999999999999990999999999999999',
+      '99999900000099999999000000999999',
+      '99999999000009999990000099999999',
+      '99999999999999900099999999999999',
+      '99999999999099009999900000999999',
+      '99999999000009009000990999999999',
+      '99999999999099900090099999999999',
+      '99999999999999909009099999999999',
+      '99999999999999009900099999999999',
+      '99999999999990099909999999999999',
+      '99999999999990999009999999999999',
+      '99999999999990000099999999999999',
+      '99999999999999999999999999999999',
+      '99999999999999999999999999999999',
+      '99999999999999999999999999999999',
+    ],
+  },
+  p7341: {
+    token: 7341,
+    dreamer: '0xee50e712c9afa8d3781510d958d9e75681b0e8cb',
+    tx: '0xbd92da93af507204e12f4a4651c977aff864d231039656d0743dcf946d8782c6', // 2022-11-29
+    rows: [
+      '00090909909999993999990990909000',
+      '09999999999999943999999999999990',
+      '09999999999999933499999999999990',
+      '99999999999999934999999999999999',
+      '09999999999999444999999999999990',
+      '99999999999999933499999999999999',
+      '09999999999993933439999999999990',
+      '99999999999999334499999999999999',
+      '99999999999994434446699999999999',
+      '09999999999922552129999999999990',
+      '99999999999955555587999999999999',
+      '99999999999996188876999999999999',
+      '99999991117122217666681299999999',
+      '09999999992225211122555599999990',
+      '99999999121227662211125999999999',
+      '99999999996780123455119999999999',
+      '99999999999912000021999999999999',
+      '99999999999111201002199999999999',
+      '09999999999920001112299999999990',
+      '99999999999222227822299999999999',
+      '99999999999990012222999999999999',
+      '99999999999965500509999999999999',
+      '09999999999991551209999999999990',
+      '99999999999955550055999999999999',
+      '99999999999995555559999999999999',
+      '09999999999996178169999999999990',
+      '99999999999996111169999999999999',
+      '09999999999996877869999999999990',
+      '99999999999999788799999999999999',
+      '09999999999999988999999999999990',
+      '09999999999999687999999999999990',
+      '00090909909999979999990990909000',
+    ],
+  },
+};
 
 // A glyph digit: 9 the line, 6 the edge, 0 the ground, and any other digit d a step of a
 // ramp between them — ground + (line - ground) * d / 8 — so at the default heights (line

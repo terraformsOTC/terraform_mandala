@@ -8,16 +8,18 @@ const EMPTY = '&#160;';
 
 // Renders whichever HTML the API returned (v0 or v2, chosen via ?renderer=v0|v2)
 // with the mandala's cells in place of the parcel's, so it shows what tokenHTML would
-// return once this heightmap is committed.
+// return once this heightmap is committed to a parcel that renders with that renderer.
 //
-// On v2, MODE is the mode a commit leaves the parcel in: terraformed (2), or origin
-// terraformed (4) for an origin parcel, whose extra glyph set depends on it. The v2
-// HTML for these differs from a daydream's only in `let MODE=N`.
-//
-// v0 stays in a daydream mode: its animation runs unconditionally and a parcel must be
-// on v2 to commit, so that view is a look at the old renderer, not a commit preview.
+// MODE is the mode a commit leaves the parcel in: terraformed (2), or origin
+// terraformed (4) for an origin parcel, whose extra glyph set depends on it. On both
+// renderers the HTML for these differs from the base the API fetched only in
+// `let MODE=N` and the cells (and on v2 the TIME constant, which changes with every
+// read). v0 is a commit preview too since 2026-11-17 (James: some
+// owners want to keep creating in the v0 style): byte for byte the v0 renderer's own
+// eth_call for the committed canvas. Its daydream mode, shown until then, animates
+// the same but lets the viewer paint on the cells, which a committed parcel doesn't.
 export function buildPreviewHtml(animData, heightmap) {
-  const { html, renderer } = animData;
+  const { html } = animData;
   const chars = cellChars(animData);
   const cells = new Array(1024);
   for (let i = 0; i < 1024; i++) {
@@ -29,7 +31,7 @@ export function buildPreviewHtml(animData, heightmap) {
     `$1${cells.join('')}$2`,
   );
   const origin = isOriginStatus(animData.status);
-  const mode = renderer === 'v0' ? (origin ? 3 : 1) : origin ? 4 : 2;
+  const mode = origin ? 4 : 2;
   out = out.replace(/\blet\s+MODE\s*=\s*\d+\b/, `let MODE=${mode}`);
   return out;
 }

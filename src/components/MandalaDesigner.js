@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { generateMandala, DEFAULTS } from '@/lib/mandala';
 import MandalaControls from './MandalaControls';
 import HeightmapInspector from './HeightmapInspector';
@@ -32,6 +32,13 @@ export default function MandalaDesigner({
   const ownAntenna = antennaOf(animData);
   const shownAntenna = antenna ?? ownAntenna;
   const viewData = useMemo(() => withAntenna(animData, shownAntenna), [animData, shownAntenna]);
+  // The renderer the parcel itself uses, as loaded, until a switch in the commit
+  // panel changes it on-chain (then the panel reports the new one).
+  const [parcelRenderer, setParcelRenderer] = useState(animData?.parcelRenderer);
+  // The last commit made here ({ txHash, tokenId, heightmap }): a seal's reveal needs its transaction.
+  const [lastCommit, setLastCommit] = useState(null);
+  const onCommitted = useCallback((c) => setLastCommit(c), []);
+  useEffect(() => setParcelRenderer(animData?.parcelRenderer), [animData?.tokenId, animData?.parcelRenderer]);
   const generated = useMemo(() => {
     try {
       return generateMandala(params);
@@ -61,9 +68,20 @@ export default function MandalaDesigner({
     >
       <div className="flex flex-col gap-4">
         <h2 className="text-lg opacity-90">[animation controls]</h2>
-        <MandalaControls params={params} onChange={onParamsChange} />
+        <MandalaControls params={params} onChange={onParamsChange} lastCommit={lastCommit} />
         <HeightmapInspector heightmap={generated.heightmap} />
-        <CommitPanel tokenId={animData?.tokenId} heightmap={generated.heightmap} walletAddress={walletAddress} />
+        <CommitPanel
+          tokenId={animData?.tokenId}
+          heightmap={generated.heightmap}
+          walletAddress={walletAddress}
+          renderer={animData?.renderer}
+          onRendererChange={onRendererChange}
+          onParcelRendererChange={setParcelRenderer}
+          onCommitted={onCommitted}
+          note={params.algorithm === 'seal' && params.sealMode !== 'inscription'
+            ? 'This drawing is a seal. Save its reveal file before you sign: once it is on-chain, nothing else can open or prove it.'
+            : null}
+        />
         {generated.error && (
           <p className="text-xs" style={{ color: '#f87171' }}>
             generator error: {generated.error}
@@ -74,7 +92,7 @@ export default function MandalaDesigner({
         <h2 className="text-lg opacity-90">[preview — #{animData?.tokenId}]</h2>
 
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <RendererToggle renderer={renderer} onChange={onRendererChange} />
+          <RendererToggle renderer={renderer} own={parcelRenderer} onChange={onRendererChange} />
           {ownAntenna && (
             <AntennaToggle
               own={ownAntenna}
@@ -128,32 +146,34 @@ function AntennaToggle({ own, shown, onChange }) {
   );
 }
 
-function RendererToggle({ renderer, onChange }) {
+// The renderer the preview draws with. Each parcel renders with one on-chain (`own`:
+// v0, v1 or v2), and a mandala commits only under the preview of the parcel's own,
+// so it looks on-chain as it did here; v0 commits since 2026-11-17 (James: some
+// owners want to keep creating in the v0 style). v1 can't be previewed.
+function RendererToggle({ renderer, own, onChange }) {
+  const titles = {
+    v0: 'the original renderer: a mandala committed to a parcel on v0 looks like this',
+    v2: 'the v2 renderer: a mandala committed to a parcel on v2 looks like this',
+  };
   return (
     <div className="flex items-center gap-2">
       <span className="text-xs opacity-50 uppercase tracking-wider">renderer:</span>
       <div className="flex gap-2">
-        <button
-          type="button"
-          className="btn-primary btn-sm text-xs"
-          style={{ opacity: renderer === 'v0' ? 1 : 0.5 }}
-          disabled={renderer === 'v0'}
-          onClick={() => onChange?.('v0')}
-          title="canonical / legacy on-chain renderer"
-        >
-          v0
-        </button>
-        <button
-          type="button"
-          className="btn-primary btn-sm text-xs"
-          style={{ opacity: renderer === 'v2' ? 1 : 0.5 }}
-          disabled={renderer === 'v2'}
-          onClick={() => onChange?.('v2')}
-          title="current v2 daydream renderer"
-        >
-          v2
-        </button>
+        {['v0', 'v2'].map((r) => (
+          <button
+            key={r}
+            type="button"
+            className="btn-primary btn-sm text-xs"
+            style={{ opacity: renderer === r ? 1 : 0.5 }}
+            disabled={renderer === r}
+            onClick={() => onChange?.(r)}
+            title={own === r ? `${titles[r]} (this parcel renders with ${r})` : titles[r]}
+          >
+            {r}
+          </button>
+        ))}
       </div>
+      {own && own !== renderer && <span className="text-xs opacity-50">(parcel&apos;s is {own})</span>}
     </div>
   );
 }
@@ -310,6 +330,14 @@ export function defaultParams() {
     figure: DEFAULTS.figure,
     escherDesign: DEFAULTS.escherDesign,
     escherTones: null,
+    experimentalDesign: DEFAULTS.experimentalDesign,
+    expShift: DEFAULTS.expShift,
+    expReverse: DEFAULTS.expReverse,
+    expGround: DEFAULTS.expGround,
+    sealMode: DEFAULTS.sealMode,
+    sealSalt: DEFAULTS.sealSalt,
+    sealLayout: DEFAULTS.sealLayout,
+    sealHeightmap: null,
     grain: DEFAULTS.grain,
     spokeCount: DEFAULTS.spokeCount,
     twist: DEFAULTS.twist,

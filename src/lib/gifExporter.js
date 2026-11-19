@@ -126,11 +126,12 @@ export async function exportGif({
   const cellH = (height - 2 * (24 * (height / 560))) / 32;
   const renderFontPx = Math.max(6, Math.round(cellH * (baseFontPx / 16)));
   // status 3/4 = origin daydream / origin terraformed: triggers the extra origin
-  // glyph set in the renderer so the GIF matches the live preview (which forces
-  // MODE=3 for both origin variants).
+  // glyph set in the renderer so the GIF matches the live preview (MODE=4 for both
+  // origin variants). The heightmap tells v0 which glyphs its cycle holds.
   const state = await prepareRenderer(animData?.html, {
     primeFontPx: renderFontPx,
     isOrigin: isOriginStatus(animData?.status),
+    heightmap,
   });
 
   const MAX_ATTEMPTS = 3;

@@ -1,6 +1,7 @@
 // Commit a mandala heightmap on-chain with Terraforms.commitDreamToCanvas, and
-// (if needed first) move the parcel to the v2 renderer with setTokenURIAddress,
-// or return an already-terraformed parcel to daydream mode with enterDream.
+// (if needed first) move the parcel to the v2 renderer, or back to v0, with
+// setTokenURIAddress, or return an already-terraformed parcel to daydream mode
+// with enterDream.
 //
 // These are the only code paths on the site that write to Ethereum, so every
 // step is checked against the chain itself rather than assumed:
@@ -16,10 +17,14 @@
 //      selector would silently succeed rather than revert;
 //   6. after mining, the stored canvas and new status are read back.
 //
-// The commit also requires the parcel to render with v2 (renderer index 2);
-// otherwise the mandala would show in the older v0 style. Migration is its own
-// transaction with the same layers — see prepareMigrate below. So is the
-// return to daydream for a parcel that is already terraformed — prepareDream.
+// The commit also requires the parcel to render with the renderer the preview
+// showed — v0 (index 0) or v2 (index 2) — so the mandala looks on-chain as it did
+// on the site. Until 2026-11-17 only v2 was allowed; James: some owners want to
+// keep creating in the v0 style. A parcel on another renderer than the preview's
+// is offered the switch to it — the migration to v2, or since 2026-11-17 the switch
+// back to v0 (v1, which the site cannot preview, gets either): its own transaction
+// with the same layers — see prepareMigrate below. So is the return to daydream for
+// a parcel that is already terraformed — prepareDream.
 //
 // Contract facts below are from the verified source on Sourcify
 // (contracts/Terraforms.sol, TerraformsDreaming.sol): selectors 0x502f260c
@@ -59,6 +64,38 @@ const RENDERER_ABI = [
 // parcels against which renderer reproduces the contract's own tokenHTML.
 const RENDERER_INDEX_SLOT = 11128n;
 export const V2_INDEX = 2n;
+
+// tokenURIAddresses: 0 = v0 (the original renderer), 1 = v1, 2 = v2. The preview
+// shows v0 or v2; v1 draws differently from both (checked 2026-11-17).
+const RENDERER_NAMES = ['v0', 'v1', 'v2'];
+const rendererName = (index) => RENDERER_NAMES[Number(index)] ?? `renderer ${index}`;
+
+// Why a parcel's renderer doesn't match the preview, and what the panel offers:
+// the switch to the preview's renderer, and the preview in the parcel's own.
+function rendererMismatch(tokenId, has, want) {
+  if (has === 'v0') {
+    return new CommitError(
+      `Parcel #${tokenId} renders with v0, so this mandala would show in the v0 style, not as in the v2 preview. Show the v0 preview to commit it in that style, or migrate the parcel to v2 first.`,
+      { migrateTo: 'v2', showRenderer: 'v0' },
+    );
+  }
+  if (has === 'v2') {
+    return new CommitError(
+      `Parcel #${tokenId} renders with v2, so this mandala would show in the v2 style, not as in the v0 preview. Show the v2 preview to commit it in that style, or switch the parcel back to v0 first.`,
+      { migrateTo: 'v0', showRenderer: 'v2' },
+    );
+  }
+  const what = has === 'v1' ? 'the v1 renderer' : has;
+  return want === 'v2'
+    ? new CommitError(
+      `Parcel #${tokenId} uses ${what}, which this site can't preview. Migrate it to v2 first.`,
+      { migrateTo: 'v2' },
+    )
+    : new CommitError(
+      `Parcel #${tokenId} uses ${what}, which this site can't preview. Switch it to v0 first to commit in the v0 style, or show the v2 preview to migrate it to v2.`,
+      { migrateTo: 'v0', showRenderer: 'v2' },
+    );
+}
 
 // Read through the wallet's own connection first; some wallets do not serve
 // eth_getStorageAt, so fall back to the site's server-side read of the same slot.
@@ -100,9 +137,10 @@ async function requireMainnet(provider) {
 /**
  * Everything short of signing. Returns a summary for the confirmation step, or
  * throws CommitError with the reason the commit cannot go ahead.
+ * `renderer` is the preview's ('v0' | 'v2'); the parcel must render with it.
  * `onStep(label)` reports progress through the checks.
  */
-export async function prepareCommit({ tokenId, heightmap, account, onStep = () => {}, provider: injected }) {
+export async function prepareCommit({ tokenId, heightmap, account, renderer = 'v2', onStep = () => {}, provider: injected }) {
   const id = BigInt(tokenId);
   if (id < 1n || id > 9911n) throw new CommitError('Only minted parcels (#1–#9911) can be committed.');
 
@@ -131,16 +169,12 @@ export async function prepareCommit({ tokenId, heightmap, account, onStep = () =
     throw new CommitError(`Parcel #${tokenId} is owned by ${owner}, not the connected wallet.`);
   }
 
-  // Before the status gate, so an already-committed v0 parcel is still offered
-  // the migration.
-  onStep(`parcel #${tokenId} renders with v2`);
-  const rendererIndex = await readRendererIndex(provider, id);
-  if (rendererIndex !== V2_INDEX) {
-    throw new CommitError(
-      `Parcel #${tokenId} still uses the older v0 renderer, so a mandala would show in the v0 style. Migrate it to v2 first.`,
-      { needsV2: true },
-    );
-  }
+  // Before the status gate, so an already-committed parcel is still offered the
+  // migration.
+  const want = renderer === 'v0' ? 'v0' : 'v2';
+  onStep(`parcel #${tokenId} renders with ${want}, as previewed`);
+  const has = rendererName(await readRendererIndex(provider, id));
+  if (has !== want) throw rendererMismatch(tokenId, has, want);
 
   const status = Number(statusRaw);
   onStep(`parcel #${tokenId} is dreaming`);
@@ -179,7 +213,7 @@ export async function prepareCommit({ tokenId, heightmap, account, onStep = () =
   }
   const gas = await tf.commitDreamToCanvas.estimateGas(id, dream, { from: account });
 
-  return { tokenId: Number(id), dream, status, newStatus, owner, gas };
+  return { tokenId: Number(id), dream, status, newStatus, owner, gas, renderer: want };
 }
 
 /**
@@ -248,21 +282,40 @@ export async function verifyCommit(prepared, blockNumber) {
   return { ok: canvasOk && status === prepared.newStatus, status, canvasOk };
 }
 
-// --- Migration to the v2 renderer --------------------------------------------
+// --- Switching renderer: the migration to v2, or back to v0 -------------------
 //
 // setTokenURIAddress(uint256[] tokens, uint256 index) writes only the parcel's
 // renderer index; it requires msg.sender to OWN every listed token (an
 // authorized dreamer is not enough) and index < tokenURIAddresses.length. No
-// ETH, no transfers, no events, and it is reversible. The site only ever sends
-// it for ONE parcel and index 2, and checks that index 2 still points at the v2
-// renderer, since the contract owner can append renderers.
+// ETH, no transfers, no approvals, no events, no external calls, and it is
+// reversible. tokenURIAddresses is append-only — pushed by the constructor and
+// by the contract owner's addTokenURIAddress; nothing rewrites or removes an
+// entry — so slot 0 is v0 for good; both slots are still checked before a send.
+//
+// The site sends it for ONE parcel and exactly two targets: index 2, the
+// migration to v2 (since 2026-10-05), and index 0, the switch back to v0 (since
+// 2026-11-17; James: for owners who want to create in the v0 style). On a mainnet
+// fork the switch's only state change is that one storage write, traced opcode by
+// opcode (~/ops/mandala-tx-tests/test-switch-fork.mjs).
 
 const MIGRATE_SELECTOR = '0x29fdf854';
 const MIGRATE_CALLDATA_BYTES = 4 + 32 * 4; // offset, index, length 1, tokenId
 
-export async function prepareMigrate({ tokenId, account, onStep = () => {}, provider: injected }) {
+// The only renderer switches the site sends, frozen; anything else is refused.
+const SWITCH_TARGETS = Object.freeze({
+  v0: Object.freeze({ index: 0n, address: V0_RENDERER_ADDRESS }),
+  v2: Object.freeze({ index: V2_INDEX, address: V2_RENDERER_ADDRESS }),
+});
+const switchTarget = (to) => (
+  typeof to === 'string' && Object.prototype.hasOwnProperty.call(SWITCH_TARGETS, to) ? SWITCH_TARGETS[to] : null
+);
+
+/** Everything short of signing a switch of the parcel's renderer to `to` ('v2' | 'v0'). */
+export async function prepareMigrate({ tokenId, account, to = 'v2', onStep = () => {}, provider: injected }) {
+  const target = switchTarget(to);
+  if (!target) throw new CommitError(`The site switches parcels only to v0 or v2, not ${to}.`);
   const id = BigInt(tokenId);
-  if (id < 1n || id > 9911n) throw new CommitError('Only minted parcels (#1–#9911) can be migrated.');
+  if (id < 1n || id > 9911n) throw new CommitError('Only minted parcels (#1–#9911) can switch renderer.');
   const provider = injected ?? walletProvider();
   onStep('wallet is on Ethereum mainnet');
   await requireMainnet(provider);
@@ -274,27 +327,31 @@ export async function prepareMigrate({ tokenId, account, onStep = () => {}, prov
     throw new CommitError(`Only the owner can change a parcel's renderer. Parcel #${tokenId} is owned by ${owner}.`);
   }
 
-  onStep('renderer slot 2 is the v2 renderer');
-  const v2 = await tf.tokenURIAddresses(V2_INDEX);
-  if (v2.toLowerCase() !== V2_RENDERER_ADDRESS.toLowerCase()) {
-    throw new CommitError(`Safety check failed: renderer slot 2 is ${v2}, not the expected v2 renderer. Nothing was sent.`);
+  onStep(`renderer slot ${target.index} is the ${to} renderer`);
+  const slot = await tf.tokenURIAddresses(target.index);
+  if (slot.toLowerCase() !== target.address.toLowerCase()) {
+    throw new CommitError(`Safety check failed: renderer slot ${target.index} is ${slot}, not the expected ${to} renderer. Nothing was sent.`);
   }
 
-  onStep(`parcel #${tokenId} is not on v2 yet`);
+  onStep(`parcel #${tokenId} is not on ${to} yet`);
   const current = await readRendererIndex(provider, id);
-  if (current === V2_INDEX) throw new CommitError(`Parcel #${tokenId} already renders with v2.`);
+  if (current === target.index) throw new CommitError(`Parcel #${tokenId} already renders with ${to}.`);
 
   onStep('the transaction simulates successfully');
   try {
-    await tf.setTokenURIAddress.staticCall([id], V2_INDEX, { from: account });
+    await tf.setTokenURIAddress.staticCall([id], target.index, { from: account });
   } catch (err) {
     throw new CommitError(`The contract would reject this transaction (${err.shortMessage || err.message}). Nothing was sent.`);
   }
-  const gas = await tf.setTokenURIAddress.estimateGas([id], V2_INDEX, { from: account });
-  return { tokenId: Number(id), from: current, gas };
+  const gas = await tf.setTokenURIAddress.estimateGas([id], target.index, { from: account });
+  return { tokenId: Number(id), from: current, fromName: rendererName(current), to, index: target.index, gas };
 }
 
 export async function sendMigrate(prepared, account) {
+  const target = switchTarget(prepared?.to);
+  if (!target || prepared.index !== target.index) {
+    throw new CommitError('Safety check failed: this is not a renderer switch the site sends. Nothing was sent.');
+  }
   const provider = walletProvider();
   await requireMainnet(provider);
   const signer = await provider.getSigner();
@@ -303,18 +360,21 @@ export async function sendMigrate(prepared, account) {
   }
   const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, signer);
   const gasLimit = (prepared.gas * 120n) / 100n;
-  const tx = await tf.setTokenURIAddress.populateTransaction([BigInt(prepared.tokenId)], V2_INDEX, { gasLimit });
+  const tx = await tf.setTokenURIAddress.populateTransaction([BigInt(prepared.tokenId)], target.index, { gasLimit });
   assertMigrateTransaction(tx, prepared);
   return signer.sendTransaction(tx);
 }
 
-// Byte-level check of the migration handed to the wallet, for the same
-// fallback() reason as the commit: right contract, setTokenURIAddress, exactly
-// one tokenId, index 2, no ETH.
+// Byte-level check of the switch handed to the wallet, for the same fallback()
+// reason as the commit: right contract, setTokenURIAddress, exactly one tokenId,
+// the index of the prepared target — 2 (v2) or 0 (v0), never anything else — and
+// no ETH.
 export function assertMigrateTransaction(tx, prepared) {
   const fail = (why) => {
     throw new CommitError(`Safety check failed: ${why}. Nothing was sent.`);
   };
+  const target = switchTarget(prepared?.to);
+  if (!target) fail('the renderer switch is not to v0 or v2');
   if (!tx.to || tx.to.toLowerCase() !== TERRAFORMS_ADDRESS.toLowerCase()) fail('the transaction is not addressed to the Terraforms contract');
   if (tx.value != null && BigInt(tx.value) !== 0n) fail('the transaction would send ETH');
   if (!tx.data?.startsWith(MIGRATE_SELECTOR)) fail('the transaction does not call setTokenURIAddress');
@@ -322,20 +382,23 @@ export function assertMigrateTransaction(tx, prepared) {
   const [tokens, index] = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI).interface
     .decodeFunctionData('setTokenURIAddress', tx.data);
   if (tokens.length !== 1 || tokens[0] !== BigInt(prepared.tokenId)) fail('the transaction would change a different set of parcels');
-  if (index !== V2_INDEX) fail('the transaction would select a renderer other than v2');
+  if (index !== target.index) fail(`the transaction would select a renderer other than ${prepared.to}`);
 }
 
 /**
- * After mining: the parcel's stored renderer index at the mined block is 2. That
- * is the decisive check — the contract routes tokenHTML by exactly this value.
+ * After mining: the parcel's stored renderer index at the mined block is the
+ * target's (2 or 0). That is the decisive check — the contract routes tokenHTML
+ * by exactly this value.
  *
- * Comparing the parcel's tokenHTML with the v2 renderer's output is kept as a
+ * Comparing the parcel's tokenHTML with the target renderer's output is kept as a
  * best-effort extra only: generating a parcel's HTML costs ~9–10M gas for many
  * parcels and over 30M for some (#5257), which many RPC nodes refuse for a read
  * call. A refusal must not make a successful migration look failed — which is
  * what happened on #9230 (2026-10-05). htmlCheck: 'match' | 'mismatch' | 'skipped'.
  */
 export async function verifyMigrate(prepared, blockNumber) {
+  const target = switchTarget(prepared.to);
+  if (!target) throw new CommitError('This is not a renderer switch the site sends.');
   const provider = walletProvider();
   const blockTag = await blockReady(provider, blockNumber);
   const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, provider);
@@ -358,13 +421,13 @@ export async function verifyMigrate(prepared, blockNumber) {
         break;
       }
     }
-    const v2Html = await new Contract(V2_RENDERER_ADDRESS, RENDERER_ABI, provider)
+    const targetHtml = await new Contract(target.address, RENDERER_ABI, provider)
       .tokenHTML(status, placement, seed, 0, canvas, { blockTag });
-    htmlCheck = html === v2Html ? 'match' : 'mismatch';
+    htmlCheck = html === targetHtml ? 'match' : 'mismatch';
   } catch {
     // The node would not run the HTML call; the index check above stands.
   }
-  return { ok: index === V2_INDEX, index, htmlCheck };
+  return { ok: index === target.index, index, htmlCheck };
 }
 
 // --- Return to daydream ------------------------------------------------------

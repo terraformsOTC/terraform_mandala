@@ -7,12 +7,14 @@ import ParcelGrid from '@/components/ParcelGrid';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import MandalaDesigner, { defaultParams } from '@/components/MandalaDesigner';
 import { Footer } from '@/components/shared';
-import { DEFAULTS, PATTERNS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, normalizeGlyphSet, figureFor } from '@/lib/mandala';
+import { DEFAULTS, PATTERNS, TEMPLE_STYLES, RING_STYLES, WHEEL_SPINS, SEAL_MODES, SEAL_LAYOUTS, sealLayoutFor, normalizeGlyphSet, figureFor, MATHCASTLES_DREAMS } from '@/lib/mandala';
 import { ESCHER_DESIGNS, escherTones } from '@/lib/escher';
+import { EXPERIMENTAL_DESIGNS, normalizeExperimental } from '@/lib/experimental';
 
 const SEARCH_PARAM_KEYS = [
   'token', 'seed', 'variance', 'peak', 'start', 'order', 'min',
   'algo', 'rings', 'terraces', 'style', 'ring', 'spokes', 'twist', 'spin', 'glyph', 'line', 'edge', 'ground', 'pupil', 'eye', 'figure', 'grain', 'escher', 'tones', 'renderer', 'antenna',
+  'exp', 'shift', 'flow', 'bg', 'seal', 'salt', 'layout',
 ];
 
 const DEFAULT_RENDERER = 'v2';
@@ -206,6 +208,15 @@ function HomeInner() {
     if (params.escherDesign !== DEFAULTS.escherDesign) next.set('escher', params.escherDesign);
     const tones = escherTones(params.escherDesign, params.escherTones);
     if (tones.join() !== ESCHER_DESIGNS[params.escherDesign].tones.join()) next.set('tones', tones.join(','));
+    if (params.experimentalDesign !== DEFAULTS.experimentalDesign) next.set('exp', params.experimentalDesign);
+    if (params.expShift) next.set('shift', String(params.expShift));
+    if (params.expReverse) next.set('flow', 'reverse');
+    if (params.expGround) next.set('bg', 'ground');
+    // Seals: only the mode and layout. The text, key, salt and the sealed drawing never
+    // go into the URL.
+    if (params.sealMode !== DEFAULTS.sealMode) next.set('seal', params.sealMode);
+    if (!params.sealSalt) next.set('salt', 'off');
+    if (params.sealLayout !== DEFAULTS.sealLayout) next.set('layout', params.sealLayout);
     if (renderer !== DEFAULT_RENDERER) next.set('renderer', renderer);
     if (antenna) next.set('antenna', antenna);
     const qs = next.toString();
@@ -312,9 +323,35 @@ function HomeInner() {
 // The Nazca glyphs are our own drawings, so they credit no one (James, 2026-11-05).
 function footerCredit(params) {
   if (params.algorithm === 'rings' && params.ringStyle === 'wheel') return <WheelCredit />;
+  if (params.algorithm === 'seal') {
+    return <>A seal hides a message, a sealed message or a commitment in the drawing. Decode one, and read the format, at <a href="/seal">/seal</a>.</>;
+  }
+  // Experimental designs are our own drawings; the footer names what each is after.
+  if (params.algorithm === 'experimental') {
+    const d = EXPERIMENTAL_DESIGNS[normalizeExperimental(params.experimentalDesign)];
+    return <>Experimental — {d.label}: {d.ref}. From the heightmap exploration of November 2026.</>;
+  }
   // The Eye of Horus and its mirror, the Eye of Ra, copy a dreamt heightmap; the Ankh, the moon god and the frog are ours.
   if (params.algorithm === 'glyphs' && normalizeGlyphSet(params.glyphSet) === 'hieroglyphs' && ['horus', 'ra'].includes(figureFor('hieroglyphs', params.figure))) return <HorusCredit />;
+  // The mathcastles glyphs copy dreams: credit the dreamer and link the dream (2026-11-18).
+  if (params.algorithm === 'glyphs' && normalizeGlyphSet(params.glyphSet) === 'mathcastles') {
+    return <DreamCredit dream={MATHCASTLES_DREAMS[figureFor('mathcastles', params.figure)]} />;
+  }
   return null;
+}
+
+function DreamCredit({ dream }) {
+  return (
+    <>
+      This glyph copies the{' '}
+      <a href={`https://terraformexplorer.xyz/dreams/${dream.tx}`} target="_blank" rel="noopener noreferrer">heightmap dreamt on parcel #{dream.token} ↗</a>{' '}
+      by{' '}
+      <a href={`https://terraformexplorer.xyz/dreamers/${dream.dreamer}`} target="_blank" rel="noopener noreferrer">
+        {dream.dreamer.slice(0, 6)}…{dream.dreamer.slice(-4)} ↗
+      </a>
+      , cell for cell.
+    </>
+  );
 }
 
 // The wheel ring style is after parcel #7463's dream; credit the wallet that first
@@ -399,5 +436,13 @@ function paramsFromUrl(searchParams) {
     escherDesign,
     escherTones: escherTones(escherDesign, tonesParam),
     grain: num('grain', 0, 1, DEFAULTS.grain),
+    experimentalDesign: normalizeExperimental(searchParams.get('exp')),
+    expShift: num('shift', 0, 7, DEFAULTS.expShift),
+    expReverse: searchParams.get('flow') === 'reverse' ? 1 : 0,
+    expGround: searchParams.get('bg') === 'ground' ? 1 : 0,
+    sealMode: SEAL_MODES.includes(searchParams.get('seal')) ? searchParams.get('seal') : DEFAULTS.sealMode,
+    sealSalt: searchParams.get('salt') === 'off' ? 0 : 1,
+    sealLayout: sealLayoutFor(searchParams.get('seal'), SEAL_LAYOUTS.includes(searchParams.get('layout')) ? searchParams.get('layout') : DEFAULTS.sealLayout),
+    sealHeightmap: null,
   };
 }

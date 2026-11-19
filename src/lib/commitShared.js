@@ -13,12 +13,20 @@ export const isDreamingStatus = (status) => Number(status) % 2 === 1;
 export const isTerraformedStatus = (status) => Number(status) === 2 || Number(status) === 4;
 
 export class CommitError extends Error {
-  constructor(message, { needsV2 = false, needsDream = false } = {}) {
+  constructor(message, { migrateTo = null, needsDream = false, showRenderer = null } = {}) {
     super(message);
-    // The commit check stopped only because the parcel is not on v2 yet, or is
-    // already terraformed and the connected wallet owns it; the panel offers the
-    // migration / the return to daydream instead of a dead end.
-    this.needsV2 = needsV2;
+    // The commit check stopped only because the parcel renders with another renderer
+    // than the preview, or is already terraformed and the connected wallet owns it;
+    // the panel offers the switch of renderer (`migrateTo`: 'v2', or 'v0' since
+    // 2026-11-17) / the preview in the parcel's renderer (`showRenderer`, 'v0' | 'v2')
+    // / the return to daydream instead of a dead end.
+    this.migrateTo = migrateTo;
     this.needsDream = needsDream;
+    this.showRenderer = showRenderer;
+  }
+
+  // The offer of the migration to v2, as read before the switch back to v0 existed.
+  get needsV2() {
+    return this.migrateTo === 'v2';
   }
 }

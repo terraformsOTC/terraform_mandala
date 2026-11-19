@@ -20,6 +20,19 @@ export default function Header({ walletAddress, onConnect, onDisconnect }) {
         </div>
         <div className="flex items-center gap-4">
           <a
+            href="/?seed=experimental&algo=experimental"
+            className="text-sm opacity-60 hover:opacity-100 transition-opacity no-underline hidden md:inline whitespace-nowrap"
+          >
+            [experimental]
+          </a>
+          {/* Shown on phones too: the decoder works there (the designer does not). */}
+          <a
+            href="/seal"
+            className="text-sm opacity-60 hover:opacity-100 transition-opacity no-underline inline whitespace-nowrap"
+          >
+            [seal]
+          </a>
+          <a
             href="/antenna"
             className="text-sm opacity-60 hover:opacity-100 transition-opacity no-underline hidden md:inline whitespace-nowrap"
           >

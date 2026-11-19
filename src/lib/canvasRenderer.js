@@ -295,22 +295,25 @@ function parseScriptConstants(scriptText) {
   return constants;
 }
 
-// Reproduce the v0 contract's runtime `charSet` / `mainSet` construction for
-// the daydream branch (MODE=1, or MODE=3 for origin). V0 builds charSet from
-// the DOM `.a`..`.i` cell content (passed in as `chars`), then appends
-// unicode-block 10-char sets based on origin-ness and SEED ranges. We treat
-// MODE as a daydream variant since the preview path forces daydream.
+// Reproduce the v0 contract's runtime `charSet` / `mainSet` construction (its
+// daydream and terraformed modes animate alike). V0 builds charSet from the DOM:
+// the glyph of the first cell of each class `.i`..`.a` that some cell has, so a class
+// the heightmap doesn't use adds nothing (`present`, from the heightmap the GIF
+// draws; until 2026-11-17 every class was counted, which put blanks in the cycle of
+// any drawing without all nine heights). Then it appends unicode-block 10-char sets
+// based on origin-ness and SEED ranges.
 const V0_UNI = ORIGIN_UNI; // same 28-entry on-chain `uni` table, shared source of truth
 function v0MakeSet(start) {
   const out = [];
   for (let i = 0; i < 10; i++) out.push(String.fromCharCode(start + i));
   return out;
 }
-function buildCharSetsV0(c, chars, isOrigin) {
+function buildCharSetsV0(c, chars, isOrigin, heightmap) {
   // V0 iterates classIds in the order ['i','h','g','f','e','d','c','b','a']
-  // and pushes each cell's textContent into originalChars. Mirror that order.
+  // and pushes each present class's textContent into originalChars. Mirror that.
   const order = ['i', 'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
-  const originalChars = order.map((cls) => chars[cls] ?? ' ');
+  const present = heightmap ? new Set(Array.from(heightmap, (d) => HEIGHT_TO_CLASS[d.charCodeAt(0) - 48])) : null;
+  const originalChars = order.filter((cls) => !present || present.has(cls)).map((cls) => chars[cls] ?? ' ');
   let charSet = [...originalChars];
   const SEED = c.SEED || 0;
   if (isOrigin) {
@@ -437,7 +440,7 @@ export async function prepareRenderer(html, opts = {}) {
   const bg = parseBgColor(html);
   const baseFontPx = parseBaseFontPx(html);
   const { charSet, mainSet, drive, coreCharsetLength } = constants.version === 'v0'
-    ? buildCharSetsV0(constants, parseChars(html), isOrigin)
+    ? buildCharSetsV0(constants, parseChars(html), isOrigin, opts.heightmap)
     : buildCharSets(constants, isOrigin);
 
   // Mirror the on-chain runtime timing-function patch: CHROMA="Flow" + certain

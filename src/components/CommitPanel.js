@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CommitError, STATUS_NAMES } from '@/lib/commitShared';
 import { TERRAFORMS_ADDRESS } from '@/lib/addresses';
 
@@ -17,67 +17,87 @@ const SHORT_ADDRESS = `${TERRAFORMS_ADDRESS.slice(0, 6)}…${TERRAFORMS_ADDRESS.
  * checks (with a visible checklist), a confirmation that spells out what will
  * change, the wallet signature, then a read-back of what the chain stored.
  *
- * A parcel still on the v0 renderer is offered the migration to v2 first, as
- * its own transaction with the same stages (mode 'migrate'); the commit checks
- * then run again. A parcel that is already terraformed is offered the return to
- * daydream mode the same way (mode 'dream'), so its owner can replace the old
+ * The parcel must render with the renderer of the preview (`renderer`, v0 or v2),
+ * so the mandala looks on-chain as it did here. If it doesn't, the panel offers the
+ * preview in the parcel's own renderer (`onRendererChange`) and the switch to the
+ * preview's renderer — the migration to v2 or, since 2026-11-17, the switch back to
+ * v0: its own transaction with the same stages (mode 'migrate', target `switchTo`);
+ * the commit checks then run again, and `onParcelRendererChange` reports the
+ * parcel's new renderer. A parcel that is already terraformed is offered the return
+ * to daydream mode the same way (mode 'dream'), so its owner can replace the old
  * drawing without going to Etherscan.
  */
-export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
+export default function CommitPanel({ tokenId, heightmap, walletAddress, renderer, onRendererChange, onParcelRendererChange, onCommitted, note }) {
   const [stage, setStage] = useState('idle'); // idle | checking | confirm | signing | pending | done | error
   // Whether an error came from the pre-send checks or from sending; only the
   // former marks a checklist step as failed.
   const [failedInChecks, setFailedInChecks] = useState(true);
   const [mode, setMode] = useState('commit'); // commit | migrate | dream
-  const [needsV2, setNeedsV2] = useState(false);
+  const [switchTo, setSwitchTo] = useState(null); // the target in mode 'migrate': 'v2' | 'v0'
+  const [migrateTo, setMigrateTo] = useState(null); // offered after a failed check: 'v2' | 'v0' | null
   const [needsDream, setNeedsDream] = useState(false);
+  const [showRenderer, setShowRenderer] = useState(null);
   const [steps, setSteps] = useState([]);
   const [prepared, setPrepared] = useState(null);
   const [txHash, setTxHash] = useState(null);
   const [message, setMessage] = useState(null);
+  // Bumped by every reset and every run of the checks, so a run that finishes after
+  // the parcel, heightmap or preview renderer changed is dropped, not shown as ready.
+  const runId = useRef(0);
 
-  // Any change to what would be committed invalidates a prepared commit.
+  // Any change to what would be committed, or to the renderer it was previewed
+  // with, invalidates a prepared commit.
   useEffect(() => {
+    runId.current += 1;
     setStage('idle');
     setMode('commit');
-    setNeedsV2(false);
+    setSwitchTo(null);
+    setMigrateTo(null);
     setNeedsDream(false);
+    setShowRenderer(null);
     setSteps([]);
     setPrepared(null);
     setTxHash(null);
     setMessage(null);
-  }, [tokenId, heightmap, walletAddress]);
+  }, [tokenId, heightmap, walletAddress, renderer]);
 
   if (!walletAddress || !heightmap || tokenId == null || tokenId > 9911) return null;
 
   const fail = (err, inChecks = true) => {
     setFailedInChecks(inChecks);
     setStage('error');
-    setNeedsV2(Boolean(err?.needsV2));
+    setMigrateTo(err?.migrateTo === 'v0' || err?.migrateTo === 'v2' ? err.migrateTo : null);
     setNeedsDream(Boolean(err?.needsDream));
+    setShowRenderer(err?.showRenderer ?? null);
     setMessage(err instanceof CommitError ? err.message : err?.shortMessage || err?.message || String(err));
   };
 
-  const runChecks = async (nextMode = 'commit') => {
+  // `to` is the target renderer of a switch (mode 'migrate'): 'v2' or 'v0'.
+  const runChecks = async (nextMode = 'commit', to = null) => {
+    const run = ++runId.current;
+    const current = () => run === runId.current;
     setMode(nextMode);
-    setNeedsV2(false);
+    setSwitchTo(nextMode === 'migrate' ? to : null);
+    setMigrateTo(null);
     setNeedsDream(false);
+    setShowRenderer(null);
     setStage('checking');
     setSteps([]);
     setMessage(null);
     setTxHash(null);
-    const onStep = (label) => setSteps((s) => [...s, label]);
+    const onStep = (label) => { if (current()) setSteps((s) => [...s, label]); };
     try {
       const { prepareMigrate, prepareDream, prepareCommit } = await loadCommit();
       const result = nextMode === 'migrate'
-        ? await prepareMigrate({ tokenId, account: walletAddress, onStep })
+        ? await prepareMigrate({ tokenId, account: walletAddress, to, onStep })
         : nextMode === 'dream'
           ? await prepareDream({ tokenId, account: walletAddress, onStep })
-          : await prepareCommit({ tokenId, heightmap, account: walletAddress, onStep });
+          : await prepareCommit({ tokenId, heightmap, account: walletAddress, renderer, onStep });
+      if (!current()) return;
       setPrepared(result);
       setStage('confirm');
     } catch (err) {
-      fail(err);
+      if (current()) fail(err);
     }
   };
 
@@ -100,11 +120,13 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
       setStage('done');
       try {
         if (mode === 'migrate') {
+          const to = prepared.to;
           const check = await verifyMigrate(prepared, receipt.blockNumber);
+          if (check.ok) onParcelRendererChange?.(to);
           setMessage(
             check.ok
-              ? `Migrated. Parcel #${tokenId} now renders with v2 on-chain.${check.htmlCheck === 'mismatch' ? ' (The parcel\'s HTML did not match the v2 renderer\'s output on a second check — worth a look on Etherscan.)' : ''} Sites that cache artwork (OpenSea, tokens.mathcastles.xyz) can keep showing the old version until they refresh; on OpenSea use "Refresh metadata".`
-              : `The transaction succeeded, but the stored renderer for #${tokenId} reads ${check.index}, not v2. Check the parcel on Etherscan.`,
+              ? `${to === 'v0' ? 'Switched' : 'Migrated'}. Parcel #${tokenId} now renders with ${to} on-chain.${check.htmlCheck === 'mismatch' ? ` (The parcel's HTML did not match the ${to} renderer's output on a second check — worth a look on Etherscan.)` : ''} Sites that cache artwork (OpenSea, tokens.mathcastles.xyz) can keep showing the old version until they refresh; on OpenSea use "Refresh metadata".`
+              : `The transaction succeeded, but the stored renderer for #${tokenId} reads ${check.index}, not ${to}. Check the parcel on Etherscan.`,
           );
           return;
         }
@@ -117,6 +139,7 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
           );
           return;
         }
+        onCommitted?.({ txHash: tx.hash, tokenId, heightmap, blockNumber: receipt.blockNumber });
         const check = await verifyCommit(prepared, receipt.blockNumber);
         setMessage(
           check.ok
@@ -155,7 +178,7 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
   return (
     <div className="flex flex-col gap-2 text-xs p-3" style={BOX}>
       <span className="opacity-60 uppercase tracking-wider">
-        {mode === 'migrate' ? 'migrate to v2' : mode === 'dream' ? 'return to daydream' : 'commit on-chain'}
+        {mode === 'migrate' ? (switchTo === 'v0' ? 'switch to v0' : 'migrate to v2') : mode === 'dream' ? 'return to daydream' : 'commit on-chain'}
       </span>
 
       {stage === 'idle' && (
@@ -175,17 +198,23 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
       {stage === 'error' && (
         <>
           <p style={{ color: '#f87171' }} className="leading-relaxed">{message}</p>
-          {needsV2 ? (
+          {showRenderer && onRendererChange && (
+            <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => onRendererChange(showRenderer)}>
+              [show the {showRenderer} preview]
+            </button>
+          )}
+          {migrateTo ? (
             <>
               <p className="opacity-75 leading-relaxed">
-                Migrating changes only which on-chain renderer draws the parcel. It is a separate
-                transaction, it can be switched back, and nothing else about the parcel changes.
+                {migrateTo === 'v0'
+                  ? 'Switching changes only which on-chain renderer draws the parcel: v0, the original one. It is a separate transaction, it can be switched back to v2, and nothing else about the parcel changes.'
+                  : 'Migrating changes only which on-chain renderer draws the parcel. It is a separate transaction, it can be switched back, and nothing else about the parcel changes.'}
               </p>
-              <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => runChecks('migrate')}>
-                [migrate #{tokenId} to v2]
+              <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => runChecks('migrate', migrateTo)}>
+                {migrateTo === 'v0' ? `[switch #${tokenId} to v0]` : `[migrate #${tokenId} to v2]`}
               </button>
             </>
-          ) : needsDream ? (
+          ) : showRenderer ? null : needsDream ? (
             <>
               <p className="opacity-75 leading-relaxed">
                 Returning to daydream is a separate transaction from your wallet that makes the parcel
@@ -197,7 +226,7 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
               </button>
             </>
           ) : (
-            <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => runChecks(mode)}>
+            <button type="button" className="btn-primary btn-sm text-xs self-start" onClick={() => runChecks(mode, switchTo)}>
               [run checks again]
             </button>
           )}
@@ -210,14 +239,21 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
           {mode === 'migrate' ? (
             <div className="mt-2 p-2 leading-relaxed" style={BOX}>
               <p>
-                Parcel #{prepared.tokenId} switches from the <strong>v{prepared.from === 1n ? '1' : '0'}</strong> renderer
-                to <strong>v2</strong>. Its heightmap, mode and everything else stay as they are.
+                Parcel #{prepared.tokenId} switches from the <strong>{prepared.fromName}</strong> renderer
+                to <strong>{prepared.to}</strong>. Its heightmap, mode and everything else stay as they are.
               </p>
+              {prepared.to === 'v0' && (
+                <p className="opacity-75 mt-1">
+                  v0 is the original renderer and predates antennas: if this parcel&apos;s antenna is on, it
+                  stops showing, and leaves its traits, while the parcel is on v0. Switching back to v2
+                  brings it back.
+                </p>
+              )}
               <p className="opacity-75 mt-1">
                 Estimated gas: {prepared.gas.toString()} units, paid by you.
               </p>
               <p className="opacity-50 mt-1 break-all">
-                Terraforms.setTokenURIAddress([{prepared.tokenId}], 2) — contract {SHORT_ADDRESS}
+                Terraforms.setTokenURIAddress([{prepared.tokenId}], {String(prepared.index)}) — contract {SHORT_ADDRESS}
               </p>
             </div>
           ) : mode === 'dream' ? (
@@ -239,12 +275,14 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
             <div className="mt-2 p-2 leading-relaxed" style={BOX}>
               <p>
                 Parcel #{prepared.tokenId} goes from <strong>{STATUS_NAMES[prepared.status]}</strong> to{' '}
-                <strong>{STATUS_NAMES[prepared.newStatus]}</strong> and shows this heightmap.
+                <strong>{STATUS_NAMES[prepared.newStatus]}</strong> and shows this heightmap, drawn by
+                its <strong>{prepared.renderer}</strong> renderer as in the preview.
               </p>
               <p className="opacity-75 mt-1">
                 It stays that way unless the parcel enters daydream mode again and a new heightmap is
                 committed. Estimated gas: {prepared.gas.toString()} units, paid by you.
               </p>
+              {note && <p className="mt-1" style={{ color: '#fbbf24' }}>{note}</p>}
               <p className="opacity-50 mt-1 break-all">
                 Terraforms.commitDreamToCanvas({prepared.tokenId}, uint256[16]) — contract {SHORT_ADDRESS}
               </p>
@@ -263,7 +301,7 @@ export default function CommitPanel({ tokenId, heightmap, walletAddress }) {
               type="button"
               className="btn-primary btn-sm text-xs"
               style={{ opacity: 0.6 }}
-              onClick={() => setStage('idle')}
+              onClick={() => { setStage('idle'); setMode('commit'); setSwitchTo(null); }}
               disabled={stage === 'signing'}
             >
               [cancel]

@@ -1,4 +1,5 @@
 import { getContract, getV2RendererContract, getV0RendererContract } from './contract.js';
+import { toCanvasUints } from './heightmap.js';
 
 // Global seed is a contract constant after reveal — cache indefinitely.
 let _globalSeed = null;
@@ -37,30 +38,33 @@ export async function fetchV2TokenHTML(tokenId) {
   return html;
 }
 
-// Fetch the v0 (canonical / legacy) renderer's HTML for any token regardless of
-// its on-chain renderer index. Both renderers share the same tokenHTML signature.
+// Fetch the v0 (original) renderer's HTML for any token regardless of its
+// on-chain renderer index. Both renderers share the same tokenHTML signature.
 //
-// Subtle: we ask for status=0 (Terrain), not status=1 (Daydream), even though we
-// ultimately want the daydream animation. Reason: v0's daydream HTML emits all
-// 1024 cells as class 'a' (it expects a committed canvas via canvasData; empty
-// canvas → flat terrain). With class 'a' only, the v0 script's DOM-derived
-// `originalChars` build collapses charSet to a single glyph, so cell injection
-// in ParcelPreview ends up with no chars for classes b–i. Status=0 instead
-// emits cells with the parcel's natural heightmap distribution (a–i populated),
-// which gives us the full chars dict. The palette / keyframes / bg / fonts are
-// identical between status=0 and status=1, and ParcelPreview already forces
-// MODE=1 in the script, so daydream animation still runs.
+// v0 writes each cell's glyph into the HTML and its script reads the glyphs back
+// from the cells, so the base must contain every height: we ask for a terraformed
+// parcel (status 2) whose canvas holds all nine heights 0-8, one per row.
+// buildPreviewHtml then puts the mandala's cells and the post-commit MODE in place;
+// nothing else in the HTML depends on the status or the canvas (checked byte for
+// byte against v0's own eth_call for committed canvases, 2026-11-17). Until then this
+// read a Terrain parcel (status 0), whose cells lack any height its terrain doesn't
+// use: #3737 has no height 8, so lines at 8 previewed blank but would draw on-chain.
+// (A daydream read, status 1, ignores the canvas and draws every cell at height 0.)
+const ALL_HEIGHTS = toCanvasUints(
+  Array.from({ length: 1024 }, (_, i) => String(Math.floor(i / 32) % 9)).join(''),
+);
+
 export async function fetchV0TokenHTML(tokenId) {
   const key = `v0:${tokenId}`;
   const hit = cacheGet(key);
   if (hit) return hit;
   const [seed, placement] = await Promise.all([globalSeed(), tokenPlacement(tokenId)]);
   const html = await getV0RendererContract().tokenHTML(
-    0,         // status: Terrain — see comment above for why not Daydream
+    2,         // status: Terraformed, so the canvas below is drawn
     placement,
     seed,
     0,         // yearsOfDecay: permanently 0
-    [],        // canvasData: empty
+    ALL_HEIGHTS,
   );
   cacheSet(key, html);
   return html;

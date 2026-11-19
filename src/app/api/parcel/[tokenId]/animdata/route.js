@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchV0TokenHTML, fetchV2TokenHTML, extractAnimData } from '@/lib/tokenHTML';
-import { getContract } from '@/lib/contract';
+import { getContract, rendererIndexOf, RENDERER_NAMES } from '@/lib/contract';
 import { isUnminted, fetchUnmintedAnimData } from '@/lib/unminted';
 import { enforce } from '@/lib/rateLimit';
 
@@ -47,10 +47,12 @@ export async function GET(req, { params }) {
     }
 
     const c = getContract();
-    const [previewHtml, status, owner] = await Promise.all([
+    const [previewHtml, status, owner, parcelRenderer] = await Promise.all([
       requested === 'v0' ? fetchV0TokenHTML(tokenId) : fetchV2TokenHTML(tokenId),
       c.tokenToStatus(tokenId).then((s) => Number(s)).catch(() => null),
       c.ownerOf(tokenId).then((a) => String(a)).catch(() => null),
+      // The renderer the parcel itself uses, shown beside the preview's toggle.
+      rendererIndexOf(tokenId).then((i) => RENDERER_NAMES[Number(i)] ?? `index ${i}`).catch(() => null),
     ]);
     const meta = extractAnimData(previewHtml);
 
@@ -63,6 +65,7 @@ export async function GET(req, { params }) {
       colors: meta.colors,
       direction: meta.direction,
       renderer: requested,
+      parcelRenderer,
       seed: meta.seed,
       biome: meta.biome,
       zone: meta.zone,
