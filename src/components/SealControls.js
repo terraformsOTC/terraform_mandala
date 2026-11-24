@@ -28,21 +28,20 @@ const AUTO_SEAL_MS = 600;
 const MAX_FILE = 256 * 1024 * 1024;
 const BOX = { border: '1px solid rgba(232,232,232,0.15)' };
 
+// Kept short (James, 2026-11-19: "slim the language down"); /seal explains the format.
 const HELP = {
-  commitment: 'Only a fingerprint (SHA-256) of your text or file goes on-chain, with a random salt mixed in so nobody can test guesses. Later, publish the content and the salt: anyone can check they match, and the commit transaction proves you had it then.',
-  hash: 'A plain SHA-256 of your text or file — what sha256sum prints — or a digest you made elsewhere. No salt: anyone can test guesses against it, so use it for content nobody could guess (a file, a long text).',
-  sealed: 'Your text goes on-chain encrypted (AES-256-GCM), padded so even its length is hidden. Publish the secret whenever you like and anyone can open it straight from the chain. The seal opens with that one secret only.',
-  inscription: 'Your text goes on-chain as it is, hidden in plain sight: it looks like noise, but anyone with the decoder can read it.',
-  list: 'One secret per line, each with its own salt, committed as one fingerprint (a Merkle root). Reveal any line on its own, whenever you like; the others stay hidden.',
+  commitment: 'Only a salted fingerprint (SHA-256) of your text or file goes on-chain, so nobody can test guesses. Publish the content and the salt later: anyone can check them, and the transaction proves you had it then.',
+  hash: 'A plain SHA-256 of your text or file (what sha256sum prints), or a digest you bring. No salt, so anyone can test guesses: use it for content nobody could guess.',
+  sealed: 'Your text goes on-chain encrypted and padded, so even its length is hidden. Only its secret opens it: publish the secret when you choose.',
+  inscription: 'Your text goes on-chain as it is. It looks like noise, but anyone with the decoder can read it.',
+  list: 'One secret per line, committed as one fingerprint (a Merkle root). Reveal any line on its own; the others stay hidden.',
 };
-// In the flower's grain the sealed message is the grain's own, more compact kind, and texts are stored as they are.
 const GRAIN_HELP = {
-  sealed: 'Your text goes on-chain encrypted (a SHA-256 keystream, sealed by an HMAC-SHA256 tag), padded so even its length is hidden. Publish the secret whenever you like and anyone can open it straight from the chain. The seal opens with that one secret only.',
-  inscription: 'Your text goes on-chain as it is, hidden in plain sight: the flower looks as dreamt, but anyone with the decoder can read it.',
+  inscription: 'Your text goes on-chain as it is. The flower looks unchanged, but anyone with the decoder can read it.',
 };
 const GRAIN_NOTE = {
-  flower: 'Hidden in the grain: the flower stays exactly as dreamt (#6454); only speckles of its field move, by one height.',
-  miniflower: 'Hidden in the grain of the sunflower, whose wider field holds an encrypted message. Its petals are drawn a little differently for every seal, so each one is unique; only speckles move, by one height, and the speckle stays as dense whatever the message\'s length.',
+  flower: 'Hidden in the grain: the flower stays as dreamt on #6454; only speckles in its field move, by one height.',
+  miniflower: 'Hidden in the sunflower\'s grain, which holds an encrypted message. Every seal draws the petals a little differently, so each is unique; only speckles move, by one height.',
 };
 
 export default function SealControls({ params, update, lastCommit }) {
@@ -260,47 +259,35 @@ export default function SealControls({ params, update, lastCommit }) {
       </button>
       {error && <p style={{ color: '#f87171' }}>{error}</p>}
 
-      {!current && !isGrain && (
+      {!current && (
         <p className="opacity-50 leading-relaxed">
-          On show: an example seal, an inscription of &ldquo;{SEAL_DEMO_TEXT}&rdquo;. Every seal of the same layout
-          shares its first cells, the format&apos;s mark; the rest is the content. Write your own and it is sealed
-          into the drawing a moment after you stop typing.
-        </p>
-      )}
-      {!current && isGrain && params.sealPetal == null && params.sealCorona == null && params.sealBud == null && (
-        <p className="opacity-50 leading-relaxed">
-          On show: an example, an inscription of &ldquo;{SEAL_DEMO_TEXT}&rdquo; hidden in the {cover === 'miniflower' ? 'sunflower' : 'flower'}&apos;s
-          grain. Write your own and it is sealed into the drawing a moment after you stop typing, with a fresh
-          speckle of its own.
-        </p>
-      )}
-      {!current && isGrain && (params.sealPetal != null || params.sealCorona != null || params.sealBud != null) && (
-        <p className="opacity-50 leading-relaxed">
-          On show: the {cover === 'miniflower' ? 'sunflower' : 'flower'} at these heights, not sealed yet. Your message is
-          sealed into it a moment after you stop typing, with a fresh speckle.
+          {isGrain && (params.sealPetal != null || params.sealCorona != null || params.sealBud != null)
+            ? <>On show: the {cover === 'miniflower' ? 'sunflower' : 'flower'} at these heights, not sealed yet.</>
+            : <>On show: an example inscription, &ldquo;{SEAL_DEMO_TEXT}&rdquo;{isGrain ? ` in the ${cover === 'miniflower' ? 'sunflower' : 'flower'}'s grain` : ''}.</>}
+          {' '}Write yours and it is sealed in when you pause.
         </p>
       )}
 
       {current && (
         <div className="flex flex-col gap-2 p-2 mt-1" style={BOX}>
           <span>
-            ✓ sealed and read back: this drawing decodes to what you sealed{current.compressed ? ' (stored compressed)' : ''}.
+            ✓ sealed and read back{current.compressed ? ' (stored compressed)' : ''}.
             {current.grain && ` Hidden in the grain: ${current.grain.changed} speckles moved by one height (a ${current.grain.size}-byte frame).`}
           </span>
-          {current.kind === 'sealed' && <Secret label="Secret — the only thing that opens it. Anyone holding it can open the seal." value={current.reveal.secret} />}
-          {current.kind === 'commitment' && <Secret label={`Salt — keep it with the exact ${current.source === 'file' ? 'file' : 'text'}. Until you publish both, nobody can tell what the seal holds.`} value={current.reveal.salt} />}
-          {current.kind === 'hash' && <span className="opacity-70 break-all">SHA-256 {current.reveal.digest}. Nothing secret to keep: reveal the {current.source === 'file' ? 'file' : current.source === 'digest' ? 'content behind the digest' : 'text'} whenever you like.</span>}
-          {current.kind === 'list' && <span className="opacity-70">{current.reveal.items.length} items, each with its own reveal in the reveal file: publish one and the others stay hidden.</span>}
+          {current.kind === 'sealed' && <Secret label="Secret: whoever holds it can open the seal." value={current.reveal.secret} />}
+          {current.kind === 'commitment' && <Secret label={`Salt: keep it with the exact ${current.source === 'file' ? 'file' : 'text'}. Until you publish both, the seal reveals nothing.`} value={current.reveal.salt} />}
+          {current.kind === 'hash' && <span className="opacity-70 break-all">SHA-256 {current.reveal.digest}. Nothing secret: reveal the {current.source === 'file' ? 'file' : current.source === 'digest' ? 'content behind the digest' : 'text'} when you like.</span>}
+          {current.kind === 'list' && <span className="opacity-70">{current.reveal.items.length} items, each with its own reveal in the reveal file; publish one and the rest stay hidden.</span>}
           {current.kind === 'inscription' && <span className="opacity-70">Not secret: anyone with the decoder can read it.</span>}
           {(current.kind === 'sealed' || current.kind === 'commitment' || current.kind === 'list') && (
             <span className="opacity-60">
-              Edit it and the drawing is sealed again, with a new {current.kind === 'sealed' ? 'secret' : current.kind === 'list' ? 'set of salts' : 'salt'}: keep the
-              reveal of the seal you commit.
+              Each edit reseals it with a new {current.kind === 'sealed' ? 'secret' : current.kind === 'list' ? 'set of salts' : 'salt'}: keep the reveal
+              of the seal you commit.
             </span>
           )}
           {(current.kind === 'sealed' || current.kind === 'commitment' || current.kind === 'list') && (
             <span style={{ color: '#fbbf24' }}>
-              This site keeps nothing. Lose the reveal file and nobody can ever {current.kind === 'sealed' ? 'open' : 'prove'} this seal, you included.
+              This site keeps nothing: lose the reveal file and nobody can {current.kind === 'sealed' ? 'open' : 'prove'} this seal, you included.
             </span>
           )}
           <a
@@ -312,8 +299,8 @@ export default function SealControls({ params, update, lastCommit }) {
           </a>
           {!committed && (
             <span className="opacity-60 leading-relaxed">
-              Commit it below like any drawing. Once it is mined, its transaction and reveal links appear here and
-              in the reveal file: the transaction dates the seal.
+              Commit it below. Once it is mined, the transaction (the seal&apos;s date) and reveal links appear here and
+              in the reveal file.
             </span>
           )}
           {committed && (
@@ -326,7 +313,7 @@ export default function SealControls({ params, update, lastCommit }) {
               <span style={{ color: '#fbbf24' }}>
                 {current.kind === 'inscription' || current.kind === 'hash'
                   ? 'Reveal link — opens the decoder on this seal:'
-                  : 'Reveal links — publishing one reveals the secret in it. Keep them private until then:'}
+                  : 'Reveal links: each one gives away what it holds, so keep them private until you reveal:'}
               </span>
               {links.slice(0, 3).map((l) => <code key={l.url} className="break-all select-all opacity-80">{l.url}</code>)}
               {links.length > 3 && <span className="opacity-60">…and {links.length - 3} more in the reveal file.</span>}

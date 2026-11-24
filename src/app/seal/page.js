@@ -5,7 +5,7 @@ import SealDecoder from '@/components/SealDecoder';
 export const metadata = {
   title: 'Seal decoder',
   description:
-    'Terraform seals: a message, a sealed message or a commitment written into a Terraforms heightmap. Decode one from a parcel, a commit transaction or the digits, and read the format.',
+    'Decode a Terraform seal, a message or commitment stored in a Terraforms heightmap, from a parcel, a commit transaction or the digits.',
   alternates: { canonical: 'https://terraformmandala.xyz/seal' },
 };
 

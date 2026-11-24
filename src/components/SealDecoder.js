@@ -129,19 +129,18 @@ export default function SealDecoder() {
     <div className="flex flex-col gap-4 text-sm">
       <h1 className="text-lg opacity-90">[seal decoder]</h1>
       <p className="opacity-75 leading-relaxed">
-        A <strong>seal</strong> is a message written into a Terraforms heightmap — the 1,024 digits a parcel stores when
-        its owner commits a drawing. It looks like noise or a kaleidoscope of it, or it hides in the grain of a drawing
-        that stays as drawn. It can be a <strong>commitment</strong>{' '}
-        (a fingerprint of a secret, salted, or a plain SHA-256), a <strong>list commitment</strong> (many secrets, revealed one
-        at a time), a <strong>sealed message</strong> (encrypted, opened later by a published secret) or an{' '}
-        <strong>inscription</strong> anyone can read. The commit transaction dates it.
+        A <strong>seal</strong> is a message stored in a parcel&apos;s heightmap, the 1,024 digits its owner commits
+        on-chain. It hides in the grain of a drawing, or fills the digits as patterned noise. It can be an{' '}
+        <strong>inscription</strong> anyone can read, a <strong>sealed message</strong> that only its secret opens, a{' '}
+        <strong>commitment</strong> to a text or file, or a <strong>list</strong> revealed one line at a time. The commit
+        transaction dates it.
       </p>
       <a href="/seal/make" className="btn-primary btn-sm text-xs no-underline self-start">[make a seal]</a>
 
       <label className="flex flex-col gap-1">
         <span className="text-xs opacity-60 uppercase tracking-wider">parcel number, commit transaction, or heightmap</span>
         <textarea rows={3} value={input} onChange={(e) => setInput(e.target.value)} spellCheck={false} autoComplete="off"
-          aria-label="seal input" placeholder="e.g. 7384, or 0x… / an Etherscan link (the commitDreamToCanvas transaction), or the 1024 digits" />
+          aria-label="seal input" placeholder="e.g. 4290, a commit transaction (0x… or its Etherscan link), or the 1,024 digits" />
       </label>
       <button type="button" className="btn-primary btn-sm text-xs self-start" disabled={busy || !input.trim()} onClick={() => decode()}>
         {busy ? '[reading…]' : '[decode]'}
@@ -165,8 +164,8 @@ export default function SealDecoder() {
           )}
           {src?.kind === 'parcel' && (
             <span className="opacity-75">
-              Parcel #{src.tokenId}&apos;s stored drawing{src.status % 2 === 1 ? ' (the parcel is dreaming, so it is stored but not shown)' : ''}.
-              For the date it was committed, decode its commit transaction instead.
+              Parcel #{src.tokenId}&apos;s stored drawing{src.status % 2 === 1 ? ' (stored, not shown: the parcel is dreaming)' : ''}.
+              For its date, decode the commit transaction.
             </span>
           )}
 
@@ -216,56 +215,51 @@ export default function SealDecoder() {
 
       <section className="mt-6 pt-4 border-t border-current border-opacity-10 flex flex-col gap-2 opacity-80 leading-relaxed">
         <h2 className="text-base">How it works</h2>
+        <p>What each kind stores:</p>
+        <ul className="list-disc pl-5 flex flex-col gap-1">
+          <li><strong>Inscription</strong>: the text itself.</li>
+          <li><strong>Sealed message</strong>: the text, encrypted under keys derived from a random 32-byte secret and
+            padded so its length is hidden. No other secret can open it.</li>
+          <li><strong>Salted commitment</strong>: SHA-256 of the content with a random 16-byte salt, so even a short
+            text cannot be guessed.</li>
+          <li><strong>Plain hash</strong>: SHA-256 of the content, what sha256sum prints. Anyone can test guesses
+            against it.</li>
+          <li><strong>List</strong>: the Merkle root of salted lines, so each line can be revealed alone.</li>
+        </ul>
         <p>
-          The drawing is the record and the commit transaction dates it. A <strong>salted commitment</strong> stores{' '}
-          <code>SHA-256(&quot;terraform-seal/commit/v1&quot; | 0x00 | salt | content)</code> with a 16-byte random salt, so even
-          a short or guessable text cannot be found by trying candidates; a <strong>plain hash</strong> stores{' '}
-          <code>SHA-256(content)</code>, what sha256sum prints, which anyone can test guesses against. A{' '}
-          <strong>list</strong> stores the root of a Merkle tree of salted items, so each can be revealed alone. A{' '}
-          <strong>sealed message</strong> stores the text encrypted with AES-256-GCM under keys derived from a 32-byte
-          secret, padded so its length is hidden, with a commitment to that secret so no second secret can open it to
-          another text. An <strong>inscription</strong> stores the text itself. Texts are DEFLATE-compressed when that
-          makes them shorter.
+          <strong>In the grain</strong> (the flower layouts), each cell&apos;s parity, odd or even, is one bit. A public
+          syndrome-trellis code reads a 48 to 112-byte frame from those bits, and sealing moves the fewest speckles
+          by one height, so the drawing stays as drawn. The flower is parcel #6454&apos;s; a sealed message goes in
+          the sunflower, whose larger field holds it.
         </p>
         <p>
-          The bytes (<code>TFS</code>, version, mode, length, payload, a 4-byte check, then filler) are read as one number
-          and written in decimal into the cells: every cell (none), half (mirror, half-turn), a quarter (four-fold,
-          pinwheel) or an eighth (eight-fold); the other cells repeat them. One parcel holds 425 bytes at most (1,024
-          decimal digits are 3,401 bits); eight-fold holds 56, enough for any commitment. Any changed digit breaks the
-          symmetry or the check.
-        </p>
-        <p>
-          A seal can also hide in a drawing&apos;s <strong>grain</strong>, the random speckle of a glyph&apos;s ground,
-          and leave the drawing itself as drawn. Each cell gives one bit, odd or even, and the same frame (48 to 112
-          bytes) is read from those bits through a public syndrome-trellis code; to seal, the fewest speckles move by
-          one height. The designer&apos;s flower layout hides seals in the grain of parcel #6454&apos;s flower, and a sealed
-          message in a smaller flower, whose wider field holds it. There the sealed message is the grain&apos;s own,
-          more compact kind: a SHA-256 keystream and an HMAC-SHA256 tag under keys derived from the 32-byte secret,
-          padded to the frame so its length is hidden, and bound to that one secret.
+          <strong>In the digits</strong> (the symmetric layouts), the frame is written as one decimal number and repeated
+          by the layout&apos;s symmetry: up to 425 bytes with none, 56 in eight-fold. A changed digit breaks the symmetry
+          or the frame&apos;s check.
         </p>
         <h2 className="text-base mt-2">Decode it yourself</h2>
         <p>
-          The full format is at the top of <a href="/seal/seal.mjs">seal.mjs</a>, the one file this page and the designer
-          use. With Node 18+ and nothing else installed, <a href="/seal/decode.mjs">decode.mjs</a> reads a parcel or a
-          commit transaction from any Ethereum node. Test vectors: <a href="/seal/vectors.json">vectors.json</a>.
+          The full format is at the top of <a href="/seal/seal.mjs">seal.mjs</a>, the file this page runs.{' '}
+          <a href="/seal/decode.mjs">decode.mjs</a> reads a parcel or a commit transaction from any Ethereum node
+          (Node 18+, nothing to install). Test vectors: <a href="/seal/vectors.json">vectors.json</a>.
         </p>
-        <pre className="whitespace-pre-wrap p-2 text-xs" style={BOX}>{`node decode.mjs 7384
+        <pre className="whitespace-pre-wrap p-2 text-xs" style={BOX}>{`node decode.mjs 4290
 node decode.mjs 0x<commit transaction> --secret <secret>
 node decode.mjs 0x<commit transaction> --text "the secret" --salt <salt>
 node decode.mjs 0x<commit transaction> --file ./document.pdf
 node decode.mjs 0x<commit transaction> --item tfs1:…`}</pre>
         <h2 className="text-base mt-2">On-chain</h2>
         <p>
-          The same decoder also lives on Ethereum, as two contracts with no owner that nobody can change, one per
-          carrier. Seals in the digits: <strong>TerraformSealReader</strong>,{' '}
-          <code className="break-all">0xF0ecd91e78E0042C1b81945BC8FFB3E7D0E3B623</code>{' '}
-          <a href="https://etherscan.io/address/0xf0ecd91e78e0042c1b81945bc8ffb3e7d0e3b623#readContract" target="_blank" rel="noopener noreferrer">[etherscan ↗]</a>.
-          Seals in the grain: <strong>TerraformGrainReader</strong>,{' '}
+          The decoder also runs on Ethereum, as two read-only contracts that nobody owns or can change. Grain:{' '}
+          <strong>TerraformGrainReader</strong>,{' '}
           <code className="break-all">0xe6A9893749600e26cfEEce10982Cd6ddC0fE93EF</code>{' '}
           <a href="https://etherscan.io/address/0xe6a9893749600e26cfeece10982cd6ddc0fe93ef#readContract" target="_blank" rel="noopener noreferrer">[etherscan ↗]</a>.
-          Each reads a parcel&apos;s drawing straight from the Terraforms contract. <code>decode</code>, <code>textOf</code>,{' '}
-          <code>open</code> and the <code>verify</code> functions are free to call from Etherscan&apos;s Read Contract tab
-          or any Ethereum node, with no website.
+          Digits: <strong>TerraformSealReader</strong>,{' '}
+          <code className="break-all">0xF0ecd91e78E0042C1b81945BC8FFB3E7D0E3B623</code>{' '}
+          <a href="https://etherscan.io/address/0xf0ecd91e78e0042c1b81945bc8ffb3e7d0e3b623#readContract" target="_blank" rel="noopener noreferrer">[etherscan ↗]</a>.
+          Each reads a parcel&apos;s drawing from the Terraforms contract. Call <code>decode</code>, <code>textOf</code>,{' '}
+          <code>open</code> or a <code>verify</code> function for free from Etherscan&apos;s Read Contract tab, any
+          Ethereum node or another contract.
         </p>
       </section>
     </div>

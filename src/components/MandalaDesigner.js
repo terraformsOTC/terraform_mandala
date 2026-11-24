@@ -85,7 +85,7 @@ export default function MandalaDesigner({
           // The seal maker commits only a seal made here: the example on show before [seal it] is no
           // one's seal (and at other petal or bud heights not a seal at all).
           blocked={variant === 'seal' && !params.sealHeightmap
-            ? 'Seal your message first ([seal it] above): only a seal you made here can be committed.'
+            ? 'Seal your message first: only a seal made here can be committed.'
             : null}
         />
         {generated.error && (

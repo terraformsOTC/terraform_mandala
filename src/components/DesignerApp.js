@@ -259,9 +259,9 @@ function DesignerInner({ variant }) {
           <>
             <h1 className="text-2xl mb-4">seal maker</h1>
             <p className="text-sm opacity-75 mb-3 max-w-3xl">
-              Hide a message, a sealed message or a commitment in a drawing, then commit it to a dreaming parcel.
-              Connect the wallet that owns the parcel ([connect wallet], top right), pick the parcel, write your seal
-              and seal it. Everything is sealed in this tab: the text, secret and salts are never sent anywhere.
+              Hide a message or a commitment in a drawing, then commit it to a dreaming parcel you own: connect your
+              wallet (top right), pick the parcel, write, commit. Everything happens in this tab; your text, secret and
+              salts are never sent anywhere.
             </p>
             <p className="text-sm mb-3">
               <a href="/seal">[decode a seal]</a>
@@ -361,7 +361,7 @@ function footerCredit(params) {
     if (sealLayoutFor(params.sealMode, params.sealLayout) === 'flower') {
       return <FlowerCredit small={params.sealMode === 'sealed'} changed={params.sealPetal != null || params.sealCorona != null || params.sealBud != null} />;
     }
-    return <>A seal hides a message, a sealed message or a commitment in the drawing. Decode one, and read the format, at <a href="/seal">/seal</a>.</>;
+    return <>Decode seals, and read the format, at <a href="/seal">/seal</a>.</>;
   }
   // Experimental designs are our own drawings; the footer names what each is after.
   if (params.algorithm === 'experimental') {
@@ -401,7 +401,7 @@ function FlowerCredit({ small, changed = false }) {
       <a href={`https://terraformexplorer.xyz/dreamers/${dream.dreamer}`} target="_blank" rel="noopener noreferrer">
         {dream.dreamer.slice(0, 6)}…{dream.dreamer.slice(-4)} ↗
       </a>
-      {small || changed ? '' : ', cell for cell'}{changed ? ', at the heights set here' : ''}; the seal hides in its grain. Decode one, and read the format, at <a href="/seal">/seal</a>.
+      {small || changed ? '' : ', cell for cell'}{changed ? ', at the heights set here' : ''}; the seal hides in its grain. Decode seals at <a href="/seal">/seal</a>.
     </>
   );
 }
