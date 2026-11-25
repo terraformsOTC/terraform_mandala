@@ -1,7 +1,8 @@
 // Commit a mandala heightmap on-chain with Terraforms.commitDreamToCanvas, and
 // (if needed first) move the parcel to the v2 renderer, or back to v0, with
 // setTokenURIAddress, or return an already-terraformed parcel to daydream mode
-// with enterDream.
+// with enterDream. Since 2026-11-25 also a parcel's attunement, set on the v2
+// metadata contract from the unlinked /attune page (setAttunement, at the end).
 //
 // These are the only code paths on the site that write to Ethereum, so every
 // step is checked against the chain itself rather than assumed:
@@ -33,7 +34,7 @@
 // 2026-10-05 and 2026-11-10).
 
 import { AbiCoder, BrowserProvider, Contract, keccak256 } from 'ethers';
-import { TERRAFORMS_ADDRESS, V0_RENDERER_ADDRESS, V2_RENDERER_ADDRESS } from './addresses';
+import { TERRAFORMS_ADDRESS, V0_RENDERER_ADDRESS, V2_RENDERER_ADDRESS, TOKEN_URI_V2_ADDRESS } from './addresses';
 import { STATUS_NAMES, isDreamingStatus, isTerraformedStatus, CommitError } from './commitShared';
 import { toCanvasUints, validate, TOTAL } from './heightmap';
 
@@ -519,4 +520,144 @@ export async function verifyDream(prepared, blockNumber) {
   const tf = new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, provider);
   const status = Number(await tf.tokenToStatus(BigInt(prepared.tokenId), { blockTag }));
   return { ok: status === prepared.newStatus, status };
+}
+
+// --- Attunement --------------------------------------------------------------
+//
+// Fourth write path, added 2026-11-25 at James's request, to try a function nobody
+// had ever called: setAttunement(uint256 tokenId, int256 attunement) on Terraforms'
+// v2 metadata contract, TerraformsTokenURI_v2_0 behind its proxy (verified source;
+// selector 0xf68a102a, present in the implementation's bytecode, checked 2026-11-25).
+// It requires msg.sender == Terraforms.ownerOf(tokenId) (an authorized dreamer is not
+// enough), stores the number at tokenPlacementToAttunement[tokenToPlacement(tokenId)]
+// and emits AttunementSet(tokenId, attunement). No ETH, no transfers, nothing else
+// stored; the number stays with the parcel's slot through a sale. The renderer ignores
+// it today: it writes ATTUNEMENT=0 into every parcel's script whatever is stored.
+// Mathcastles can upgrade the proxy, so it must still run the implementation that was
+// read, or nothing is sent.
+
+const TOKEN_URI_V2_IMPLEMENTATION = '0x0CE833EE4d97CEDc22bBf3B85c04b1fd9Ac5AbDd';
+const EIP1967_IMPLEMENTATION_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
+const ATTUNE_SELECTOR = '0xf68a102a';
+const ATTUNE_CALLDATA_BYTES = 4 + 32 * 2;
+const TOKEN_URI_V2_ABI = [
+  'function setAttunement(uint256 tokenId, int256 attunement)',
+  'function tokenToAttunement(uint256 tokenId) view returns (int256)',
+  'event AttunementSet(uint256 indexed tokenId, int256 attunement)',
+];
+
+// The site sends whole numbers no bigger than this either way: the parcel's script
+// would read a bigger one inexactly (a JavaScript number), and a small number stays
+// safe in whatever maths a later renderer might do with it.
+export const ATTUNE_LIMIT = BigInt(Number.MAX_SAFE_INTEGER);
+
+export function parseAttunement(input) {
+  const text = String(input ?? '').trim();
+  if (!/^-?\d+$/.test(text)) throw new CommitError('An attunement is a whole number, like 42 or -1.');
+  const value = BigInt(text);
+  if (value > ATTUNE_LIMIT || value < -ATTUNE_LIMIT) {
+    throw new CommitError(`Keep the attunement between -${ATTUNE_LIMIT} and ${ATTUNE_LIMIT}.`);
+  }
+  return value;
+}
+
+async function requireAuditedTokenURI(provider) {
+  const raw = await provider.getStorage(TOKEN_URI_V2_ADDRESS, EIP1967_IMPLEMENTATION_SLOT);
+  const implementation = `0x${raw.slice(-40)}`;
+  if (implementation.toLowerCase() !== TOKEN_URI_V2_IMPLEMENTATION.toLowerCase()) {
+    throw new CommitError(`Mathcastles has upgraded the v2 metadata contract (it now runs ${implementation}), so this page needs re-checking before it sends anything. Nothing was sent.`);
+  }
+}
+
+/** A parcel's stored attunement: 0 unless its owner has set one. */
+export async function readAttunement(tokenId, { provider: injected, blockTag } = {}) {
+  const provider = injected ?? walletProvider();
+  const uri = new Contract(TOKEN_URI_V2_ADDRESS, TOKEN_URI_V2_ABI, provider);
+  return blockTag == null ? uri.tokenToAttunement(BigInt(tokenId)) : uri.tokenToAttunement(BigInt(tokenId), { blockTag });
+}
+
+/** Everything short of signing setAttunement(tokenId, value). */
+export async function prepareAttune({ tokenId, value, account, onStep = () => {}, provider: injected }) {
+  const id = BigInt(tokenId);
+  if (id < 1n || id > 9911n) throw new CommitError('Only minted parcels (#1–#9911) have an attunement.');
+  const attunement = parseAttunement(value);
+  const provider = injected ?? walletProvider();
+  onStep('wallet is on Ethereum mainnet');
+  await requireMainnet(provider);
+
+  onStep(`you own parcel #${tokenId}`);
+  const owner = await new Contract(TERRAFORMS_ADDRESS, TERRAFORMS_ABI, provider).ownerOf(id);
+  if (owner.toLowerCase() !== account.toLowerCase()) {
+    throw new CommitError(`Only the owner can set a parcel's attunement. Parcel #${tokenId} is owned by ${owner}.`);
+  }
+
+  onStep('the v2 metadata contract runs the code this page was checked against');
+  await requireAuditedTokenURI(provider);
+
+  onStep(`parcel #${tokenId}'s attunement is read`);
+  const uri = new Contract(TOKEN_URI_V2_ADDRESS, TOKEN_URI_V2_ABI, provider);
+  const current = await uri.tokenToAttunement(id);
+
+  onStep('the transaction simulates successfully');
+  try {
+    await uri.setAttunement.staticCall(id, attunement, { from: account });
+  } catch (err) {
+    throw new CommitError(`The contract would reject this transaction (${err.shortMessage || err.message}). Nothing was sent.`);
+  }
+  const gas = await uri.setAttunement.estimateGas(id, attunement, { from: account });
+  return { tokenId: Number(id), attunement, current, gas };
+}
+
+export async function sendAttune(prepared, account) {
+  if (typeof prepared?.attunement !== 'bigint') {
+    throw new CommitError('Safety check failed: the prepared attunement is not a whole number. Nothing was sent.');
+  }
+  const provider = walletProvider();
+  await requireMainnet(provider);
+  const signer = await provider.getSigner();
+  if ((await signer.getAddress()).toLowerCase() !== account.toLowerCase()) {
+    throw new CommitError('The wallet account changed. Reconnect and try again.');
+  }
+  await requireAuditedTokenURI(provider);
+  const uri = new Contract(TOKEN_URI_V2_ADDRESS, TOKEN_URI_V2_ABI, signer);
+  const gasLimit = (prepared.gas * 120n) / 100n;
+  const tx = await uri.setAttunement.populateTransaction(BigInt(prepared.tokenId), prepared.attunement, { gasLimit });
+  assertAttuneTransaction(tx, prepared);
+  return signer.sendTransaction(tx);
+}
+
+// Byte-level check of the transaction handed to the wallet: the v2 metadata
+// contract, setAttunement, exactly one tokenId and one number, both as prepared, the
+// number within the limit, and no ETH.
+export function assertAttuneTransaction(tx, prepared) {
+  const fail = (why) => {
+    throw new CommitError(`Safety check failed: ${why}. Nothing was sent.`);
+  };
+  if (!tx.to || tx.to.toLowerCase() !== TOKEN_URI_V2_ADDRESS.toLowerCase()) fail('the transaction is not addressed to the v2 metadata contract');
+  if (tx.value != null && BigInt(tx.value) !== 0n) fail('the transaction would send ETH');
+  if (!tx.data?.startsWith(ATTUNE_SELECTOR)) fail('the transaction does not call setAttunement');
+  if ((tx.data.length - 2) / 2 !== ATTUNE_CALLDATA_BYTES) fail('the transaction data is not the expected size');
+  const [tokenId, attunement] = new Contract(TOKEN_URI_V2_ADDRESS, TOKEN_URI_V2_ABI).interface
+    .decodeFunctionData('setAttunement', tx.data);
+  if (tokenId !== BigInt(prepared.tokenId)) fail('the transaction targets a different parcel');
+  if (attunement !== prepared.attunement) fail('the transaction carries a different number');
+  if (attunement > ATTUNE_LIMIT || attunement < -ATTUNE_LIMIT) fail('the number is out of range');
+}
+
+/** After mining: the stored number at the mined block, and the receipt's AttunementSet event. */
+export async function verifyAttune(prepared, receipt) {
+  const provider = walletProvider();
+  const blockTag = await blockReady(provider, receipt.blockNumber);
+  const stored = await readAttunement(prepared.tokenId, { provider, blockTag });
+  const iface = new Contract(TOKEN_URI_V2_ADDRESS, TOKEN_URI_V2_ABI).interface;
+  const logged = (receipt.logs || []).some((log) => {
+    if (log.address?.toLowerCase() !== TOKEN_URI_V2_ADDRESS.toLowerCase()) return false;
+    try {
+      const event = iface.parseLog({ topics: [...log.topics], data: log.data });
+      return event?.name === 'AttunementSet' && event.args.tokenId === BigInt(prepared.tokenId) && event.args.attunement === prepared.attunement;
+    } catch {
+      return false;
+    }
+  });
+  return { ok: stored === prepared.attunement && logged, stored, logged };
 }

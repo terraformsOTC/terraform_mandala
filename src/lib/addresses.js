@@ -12,3 +12,7 @@ export const V2_RENDERER_ADDRESS = '0x8aF860C8F157F4E3B6A54913BFA6Bb96ab2605C2';
 // — verified via scripts/discover-v0.mjs. Shares the same tokenHTML(status,
 // placement, seed, yearsOfDecay, canvasData) ABI as v2.
 export const V0_RENDERER_ADDRESS = '0xA5aFC9fE76a28fB12C60954Ed6e2e5f8ceF64Ff2';
+
+// Terraforms' v2 metadata contract (TerraformsTokenURI_v2_0 behind an upgradeable
+// proxy), where each parcel's attunement is stored. Used by /attune (2026-11-25).
+export const TOKEN_URI_V2_ADDRESS = '0xfca647387e28e73e291dd90e7b09fa32bcbb2604';
