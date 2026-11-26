@@ -2,7 +2,8 @@
 // (if needed first) move the parcel to the v2 renderer, or back to v0, with
 // setTokenURIAddress, or return an already-terraformed parcel to daydream mode
 // with enterDream. Since 2026-11-25 also a parcel's attunement, set on the v2
-// metadata contract from the unlinked /attune page (setAttunement, at the end).
+// metadata contract (and since 2026-11-26 on the v1 one) from the unlinked /attune
+// page (setAttunement, at the end).
 //
 // These are the only code paths on the site that write to Ethereum, so every
 // step is checked against the chain itself rather than assumed:
@@ -34,7 +35,7 @@
 // 2026-10-05 and 2026-11-10).
 
 import { AbiCoder, BrowserProvider, Contract, keccak256 } from 'ethers';
-import { TERRAFORMS_ADDRESS, V0_RENDERER_ADDRESS, V2_RENDERER_ADDRESS, TOKEN_URI_V2_ADDRESS } from './addresses';
+import { TERRAFORMS_ADDRESS, V0_RENDERER_ADDRESS, V2_RENDERER_ADDRESS, TOKEN_URI_V2_ADDRESS, TOKEN_URI_V1_ADDRESS } from './addresses';
 import { STATUS_NAMES, isDreamingStatus, isTerraformedStatus, CommitError } from './commitShared';
 import { toCanvasUints, validate, TOTAL } from './heightmap';
 
@@ -528,23 +529,37 @@ export async function verifyDream(prepared, blockNumber) {
 // had ever called: setAttunement(uint256 tokenId, int256 attunement) on Terraforms'
 // v2 metadata contract, TerraformsTokenURI_v2_0 behind its proxy (verified source;
 // selector 0xf68a102a, present in the implementation's bytecode, checked 2026-11-25).
-// It requires msg.sender == Terraforms.ownerOf(tokenId) (an authorized dreamer is not
-// enough), stores the number at tokenPlacementToAttunement[tokenToPlacement(tokenId)]
+// Since 2026-11-26 (James) also on the v1 metadata contract, TerraformsTokenURI_v1_0
+// behind its own proxy: the same function, require and event, in a separate store
+// (verified source; selector present in its implementation's bytecode, checked
+// 2026-11-26). v1's code can be upgraded until 24 Dec 2026, 00:11:47 UTC and is
+// frozen after; its setAttunement has no lock, so it keeps working.
+// Either requires msg.sender == Terraforms.ownerOf(tokenId) (an authorized dreamer is
+// not enough), stores the number at tokenPlacementToAttunement[tokenToPlacement(tokenId)]
 // and emits AttunementSet(tokenId, attunement). No ETH, no transfers, nothing else
-// stored; the number stays with the parcel's slot through a sale. The renderer ignores
-// it today: it writes ATTUNEMENT=0 into every parcel's script whatever is stored.
-// Mathcastles can upgrade the proxy, so it must still run the implementation that was
-// read, or nothing is sent.
+// stored; the number stays with the parcel's slot through a sale. Neither renderer
+// draws it today: both write ATTUNEMENT=0 into every parcel's script whatever is
+// stored. Mathcastles can upgrade each proxy, so each must still run the
+// implementation that was read for it, or nothing is sent.
 
-const TOKEN_URI_V2_IMPLEMENTATION = '0x0CE833EE4d97CEDc22bBf3B85c04b1fd9Ac5AbDd';
 const EIP1967_IMPLEMENTATION_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
 const ATTUNE_SELECTOR = '0xf68a102a';
 const ATTUNE_CALLDATA_BYTES = 4 + 32 * 2;
-const TOKEN_URI_V2_ABI = [
+const ATTUNE_ABI = [
   'function setAttunement(uint256 tokenId, int256 attunement)',
   'function tokenToAttunement(uint256 tokenId) view returns (int256)',
   'event AttunementSet(uint256 indexed tokenId, int256 attunement)',
 ];
+
+// The two metadata contracts that keep an attunement, each with the implementation
+// audited for it. Frozen: a prepared attunement names one of these, or nothing is sent.
+const ATTUNE_TARGETS = Object.freeze({
+  v2: Object.freeze({ address: TOKEN_URI_V2_ADDRESS, implementation: '0x0CE833EE4d97CEDc22bBf3B85c04b1fd9Ac5AbDd' }),
+  v1: Object.freeze({ address: TOKEN_URI_V1_ADDRESS, implementation: '0xc62811036aBcb606E8cb21bd61865c4C22F1A8aF' }),
+});
+const attuneTarget = (version) => (
+  typeof version === 'string' && Object.prototype.hasOwnProperty.call(ATTUNE_TARGETS, version) ? ATTUNE_TARGETS[version] : null
+);
 
 // The site sends whole numbers no bigger than this either way: the parcel's script
 // would read a bigger one inexactly (a JavaScript number), and a small number stays
@@ -561,23 +576,28 @@ export function parseAttunement(input) {
   return value;
 }
 
-async function requireAuditedTokenURI(provider) {
-  const raw = await provider.getStorage(TOKEN_URI_V2_ADDRESS, EIP1967_IMPLEMENTATION_SLOT);
+async function requireAuditedTokenURI(provider, version) {
+  const target = attuneTarget(version);
+  const raw = await provider.getStorage(target.address, EIP1967_IMPLEMENTATION_SLOT);
   const implementation = `0x${raw.slice(-40)}`;
-  if (implementation.toLowerCase() !== TOKEN_URI_V2_IMPLEMENTATION.toLowerCase()) {
-    throw new CommitError(`Mathcastles has upgraded the v2 metadata contract (it now runs ${implementation}), so this page needs re-checking before it sends anything. Nothing was sent.`);
+  if (implementation.toLowerCase() !== target.implementation.toLowerCase()) {
+    throw new CommitError(`Mathcastles has upgraded the ${version} metadata contract (it now runs ${implementation}), so this page needs re-checking before it sends anything. Nothing was sent.`);
   }
 }
 
-/** A parcel's stored attunement: 0 unless its owner has set one. */
-export async function readAttunement(tokenId, { provider: injected, blockTag } = {}) {
+/** A parcel's stored attunement on the v2 or v1 metadata contract: 0 unless its owner has set one. */
+export async function readAttunement(tokenId, { provider: injected, blockTag, version = 'v2' } = {}) {
+  const target = attuneTarget(version);
+  if (!target) throw new CommitError(`An attunement is stored only on the v1 or v2 metadata contract, not ${version}.`);
   const provider = injected ?? walletProvider();
-  const uri = new Contract(TOKEN_URI_V2_ADDRESS, TOKEN_URI_V2_ABI, provider);
+  const uri = new Contract(target.address, ATTUNE_ABI, provider);
   return blockTag == null ? uri.tokenToAttunement(BigInt(tokenId)) : uri.tokenToAttunement(BigInt(tokenId), { blockTag });
 }
 
-/** Everything short of signing setAttunement(tokenId, value). */
-export async function prepareAttune({ tokenId, value, account, onStep = () => {}, provider: injected }) {
+/** Everything short of signing setAttunement(tokenId, value) on the `version` ('v2' | 'v1') metadata contract. */
+export async function prepareAttune({ tokenId, value, account, version = 'v2', onStep = () => {}, provider: injected }) {
+  const target = attuneTarget(version);
+  if (!target) throw new CommitError(`The site sets attunements only on the v1 or v2 metadata contract, not ${version}.`);
   const id = BigInt(tokenId);
   if (id < 1n || id > 9911n) throw new CommitError('Only minted parcels (#1–#9911) have an attunement.');
   const attunement = parseAttunement(value);
@@ -591,11 +611,11 @@ export async function prepareAttune({ tokenId, value, account, onStep = () => {}
     throw new CommitError(`Only the owner can set a parcel's attunement. Parcel #${tokenId} is owned by ${owner}.`);
   }
 
-  onStep('the v2 metadata contract runs the code this page was checked against');
-  await requireAuditedTokenURI(provider);
+  onStep(`the ${version} metadata contract runs the code this page was checked against`);
+  await requireAuditedTokenURI(provider, version);
 
-  onStep(`parcel #${tokenId}'s attunement is read`);
-  const uri = new Contract(TOKEN_URI_V2_ADDRESS, TOKEN_URI_V2_ABI, provider);
+  onStep(`parcel #${tokenId}'s ${version} attunement is read`);
+  const uri = new Contract(target.address, ATTUNE_ABI, provider);
   const current = await uri.tokenToAttunement(id);
 
   onStep('the transaction simulates successfully');
@@ -605,11 +625,15 @@ export async function prepareAttune({ tokenId, value, account, onStep = () => {}
     throw new CommitError(`The contract would reject this transaction (${err.shortMessage || err.message}). Nothing was sent.`);
   }
   const gas = await uri.setAttunement.estimateGas(id, attunement, { from: account });
-  return { tokenId: Number(id), attunement, current, gas };
+  return { tokenId: Number(id), attunement, current, gas, version };
 }
 
 export async function sendAttune(prepared, account) {
-  if (typeof prepared?.attunement !== 'bigint') {
+  const target = attuneTarget(prepared?.version);
+  if (!target) {
+    throw new CommitError('Safety check failed: the prepared attunement names no metadata contract this page knows. Nothing was sent.');
+  }
+  if (typeof prepared.attunement !== 'bigint') {
     throw new CommitError('Safety check failed: the prepared attunement is not a whole number. Nothing was sent.');
   }
   const provider = walletProvider();
@@ -618,40 +642,44 @@ export async function sendAttune(prepared, account) {
   if ((await signer.getAddress()).toLowerCase() !== account.toLowerCase()) {
     throw new CommitError('The wallet account changed. Reconnect and try again.');
   }
-  await requireAuditedTokenURI(provider);
-  const uri = new Contract(TOKEN_URI_V2_ADDRESS, TOKEN_URI_V2_ABI, signer);
+  await requireAuditedTokenURI(provider, prepared.version);
+  const uri = new Contract(target.address, ATTUNE_ABI, signer);
   const gasLimit = (prepared.gas * 120n) / 100n;
   const tx = await uri.setAttunement.populateTransaction(BigInt(prepared.tokenId), prepared.attunement, { gasLimit });
   assertAttuneTransaction(tx, prepared);
   return signer.sendTransaction(tx);
 }
 
-// Byte-level check of the transaction handed to the wallet: the v2 metadata
-// contract, setAttunement, exactly one tokenId and one number, both as prepared, the
-// number within the limit, and no ETH.
+// Byte-level check of the transaction handed to the wallet: the prepared metadata
+// contract (v2 or v1, from the frozen targets), setAttunement, exactly one tokenId and
+// one number, both as prepared, the number within the limit, and no ETH.
 export function assertAttuneTransaction(tx, prepared) {
   const fail = (why) => {
     throw new CommitError(`Safety check failed: ${why}. Nothing was sent.`);
   };
-  if (!tx.to || tx.to.toLowerCase() !== TOKEN_URI_V2_ADDRESS.toLowerCase()) fail('the transaction is not addressed to the v2 metadata contract');
+  const target = attuneTarget(prepared?.version);
+  if (!target) fail('the prepared attunement names no metadata contract this page knows');
+  if (!tx.to || tx.to.toLowerCase() !== target.address.toLowerCase()) fail(`the transaction is not addressed to the ${prepared.version} metadata contract`);
   if (tx.value != null && BigInt(tx.value) !== 0n) fail('the transaction would send ETH');
   if (!tx.data?.startsWith(ATTUNE_SELECTOR)) fail('the transaction does not call setAttunement');
   if ((tx.data.length - 2) / 2 !== ATTUNE_CALLDATA_BYTES) fail('the transaction data is not the expected size');
-  const [tokenId, attunement] = new Contract(TOKEN_URI_V2_ADDRESS, TOKEN_URI_V2_ABI).interface
+  const [tokenId, attunement] = new Contract(target.address, ATTUNE_ABI).interface
     .decodeFunctionData('setAttunement', tx.data);
   if (tokenId !== BigInt(prepared.tokenId)) fail('the transaction targets a different parcel');
   if (attunement !== prepared.attunement) fail('the transaction carries a different number');
   if (attunement > ATTUNE_LIMIT || attunement < -ATTUNE_LIMIT) fail('the number is out of range');
 }
 
-/** After mining: the stored number at the mined block, and the receipt's AttunementSet event. */
+/** After mining: the stored number at the mined block, and the receipt's AttunementSet event from that contract. */
 export async function verifyAttune(prepared, receipt) {
+  const target = attuneTarget(prepared?.version);
+  if (!target) throw new CommitError('The prepared attunement names no metadata contract this page knows.');
   const provider = walletProvider();
   const blockTag = await blockReady(provider, receipt.blockNumber);
-  const stored = await readAttunement(prepared.tokenId, { provider, blockTag });
-  const iface = new Contract(TOKEN_URI_V2_ADDRESS, TOKEN_URI_V2_ABI).interface;
+  const stored = await readAttunement(prepared.tokenId, { provider, blockTag, version: prepared.version });
+  const iface = new Contract(target.address, ATTUNE_ABI).interface;
   const logged = (receipt.logs || []).some((log) => {
-    if (log.address?.toLowerCase() !== TOKEN_URI_V2_ADDRESS.toLowerCase()) return false;
+    if (log.address?.toLowerCase() !== target.address.toLowerCase()) return false;
     try {
       const event = iface.parseLog({ topics: [...log.topics], data: log.data });
       return event?.name === 'AttunementSet' && event.args.tokenId === BigInt(prepared.tokenId) && event.args.attunement === prepared.attunement;

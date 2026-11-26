@@ -16,3 +16,7 @@ export const V0_RENDERER_ADDRESS = '0xA5aFC9fE76a28fB12C60954Ed6e2e5f8ceF64Ff2';
 // Terraforms' v2 metadata contract (TerraformsTokenURI_v2_0 behind an upgradeable
 // proxy), where each parcel's attunement is stored. Used by /attune (2026-11-25).
 export const TOKEN_URI_V2_ADDRESS = '0xfca647387e28e73e291dd90e7b09fa32bcbb2604';
+
+// Terraforms' v1 metadata contract (TerraformsTokenURI_v1_0 behind its own proxy),
+// which keeps a separate attunement store. /attune since 2026-11-26.
+export const TOKEN_URI_V1_ADDRESS = '0x5321227601455cbe80ef3cba294a653ae6b806e8';

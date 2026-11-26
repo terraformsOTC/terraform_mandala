@@ -4,7 +4,8 @@ import AttunePanel from '@/components/AttunePanel';
 
 // Unlinked on purpose (James, 2026-11-25): not in the header, the sitemap or
 // robots.txt, since listing it there would advertise it. Its one write is
-// setAttunement, through lib/commit.js with the same checks as the other writes.
+// setAttunement (on the v2 or, since 2026-11-26, the v1 metadata contract), through
+// lib/commit.js with the same checks as the other writes.
 export const metadata = {
   title: 'Attune',
   description: "Set a Terraforms parcel's attunement.",
